@@ -491,7 +491,7 @@ impl MantarayNode {
 
         let fork = self.forks.get(&path[0]);
 
-        match self.forks.get(&path[0]) {
+        match fork {
             Some(f) => {
                 let prefix_index = find_index_of_array(path, &fork.unwrap().prefix);
 
