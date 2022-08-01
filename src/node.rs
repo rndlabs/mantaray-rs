@@ -237,13 +237,6 @@ fn encrypt_decrypt(key: &[u8], data: &mut [u8]) {
     });
 }
 
-fn zero_pad<const A: usize, const B: usize>(arr: [u8; A]) -> [u8; B] {
-    assert!(B >= A); //just for a nicer error message, adding #[track_caller] to the function may also be desirable
-    let mut b = [0; B];
-    b[..A].copy_from_slice(&arr);
-    b
-}
-
 impl MantarayNode {
     // immutable access
     pub fn node_type(&self) -> u8 {
@@ -403,7 +396,7 @@ impl MantarayNode {
         let obfuscation_key = self.obfuscation_key;
 
         let (path, fork) = match self.forks.get_mut(&path[0]) {
-            None => match path.len() > NFS_PREFIX_MAX_SIZE.into() {
+            None => match path.len() > NFS_PREFIX_MAX_SIZE {
                 true => {
                     let prefix = &path[0..NFS_PREFIX_MAX_SIZE];
                     let rest = &path[NFS_PREFIX_MAX_SIZE..];
