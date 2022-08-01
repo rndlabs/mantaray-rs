@@ -59,7 +59,7 @@ impl MantarayFork {
         let mut output = Vec::<u8>::new();
 
         // node_type
-        output.push(self.node.node_type.unwrap());
+        output.push(self.node.node_type);
         // prefix_length
         output.push(self.prefix.len() as u8);
         // prefix bytes
@@ -123,7 +123,7 @@ impl MantarayFork {
                         };
 
                     MantarayNode {
-                        node_type: Some(node_type),
+                        node_type,
                         obfuscation_key: Some(obfuscation_key),
                         content_address: None,
                         entry: entry.to_vec(),
@@ -141,7 +141,7 @@ impl MantarayFork {
                 };
 
                 MantarayNode {
-                    node_type: Some(node_type),
+                    node_type,
                     obfuscation_key: Some(obfuscation_key),
                     content_address: None,
                     entry: entry.to_vec(),
@@ -157,7 +157,7 @@ impl MantarayFork {
 
 #[derive(Debug, Clone)]
 pub struct MantarayNode {
-    node_type: Option<u8>,
+    node_type: u8,
     obfuscation_key: Option<[u8; 32]>,
     content_address: Option<Vec<u8>>,
     entry: Vec<u8>,
@@ -237,8 +237,8 @@ fn zero_pad<const A: usize, const B: usize>(arr: [u8; A]) -> [u8; B] {
 
 impl MantarayNode {
     // immutable access
-    pub fn node_type(&self) -> &Option<u8> {
-        &self.node_type
+    pub fn node_type(&self) -> u8 {
+        self.node_type
     }
 
     pub fn obfuscation_key(&self) -> &Option<[u8; 32]> {
@@ -285,7 +285,7 @@ impl MantarayNode {
     }
 
     pub fn set_node_type(&mut self, node_type: u8) {
-        self.node_type = Some(node_type)
+        self.node_type = node_type
     }
 
     pub fn set_obfuscation_key(&mut self, obfuscation_key: [u8; 32]) {
@@ -311,31 +311,19 @@ impl MantarayNode {
 
     // node type related functions
     pub fn is_value_type(&self) -> bool {
-        match self.node_type {
-            Some(t) => (t & NT_VALUE) == NT_VALUE,
-            None => panic!("Property does not exist"),
-        }
+        (self.node_type & NT_VALUE) == NT_VALUE
     }
 
     pub fn is_edge_type(&self) -> bool {
-        match self.node_type {
-            Some(t) => (t & NT_EDGE) == NT_EDGE,
-            None => panic!("Property does not exist"),
-        }
+        (self.node_type & NT_EDGE) == NT_EDGE
     }
 
     pub fn is_with_path_separator_type(&self) -> bool {
-        match self.node_type {
-            Some(t) => (t & NT_WITH_PATH_SEPARATOR) == NT_WITH_PATH_SEPARATOR,
-            None => panic!("Property does not exist"),
-        }
+        (self.node_type & NT_WITH_PATH_SEPARATOR) == NT_WITH_PATH_SEPARATOR
     }
 
     pub fn is_with_metadata_type(&self) -> bool {
-        match self.node_type {
-            Some(t) => (t & NT_WITH_METADATA) == NT_WITH_METADATA,
-            None => panic!("Property does not exist"),
-        }
+        (self.node_type & NT_WITH_METADATA) == NT_WITH_METADATA
     }
 
     pub fn node_type_is_with_metadata_type(node_type: &u8) -> bool {
@@ -353,38 +341,23 @@ impl MantarayNode {
     }
 
     fn make_value(&mut self) {
-        self.node_type = Some(match self.node_type {
-            Some(t) => t | NT_VALUE,
-            None => NT_VALUE,
-        })
+        self.node_type |= NT_VALUE
     }
 
     fn make_edge(&mut self) {
-        self.node_type = Some(match self.node_type {
-            Some(t) => t | NT_EDGE,
-            None => NT_EDGE,
-        });
+        self.node_type |= NT_EDGE
     }
 
     fn make_with_path_separator(&mut self) {
-        self.node_type = Some(match self.node_type {
-            Some(t) => t | NT_WITH_PATH_SEPARATOR,
-            None => NT_WITH_PATH_SEPARATOR,
-        });
+        self.node_type |= NT_WITH_PATH_SEPARATOR
     }
 
     fn make_with_metadata(&mut self) {
-        self.node_type = Some(match self.node_type {
-            Some(t) => t | NT_WITH_METADATA,
-            None => NT_WITH_METADATA,
-        })
+        self.node_type |= NT_WITH_METADATA
     }
 
     fn make_not_with_path_separator(&mut self) {
-        self.node_type = Some(match self.node_type {
-            Some(t) => (NT_MASK ^ NT_WITH_PATH_SEPARATOR) & t,
-            None => panic!("Property does not exist"),
-        })
+        self.node_type &= NT_MASK ^ NT_WITH_PATH_SEPARATOR
     }
 
     fn update_with_path_separator(&mut self, path: &[u8]) {
@@ -768,8 +741,8 @@ impl MantarayNode {
 
             let mut node = MantarayNode {
                 node_type: match *index == ZERO_BYTES {
-                    true => Some(NT_EDGE),
-                    false => None,
+                    true => NT_EDGE,
+                    false => 0,
                 },
                 obfuscation_key: Some(obfuscation_key.as_slice().try_into().unwrap()),
                 content_address: None,
@@ -796,7 +769,7 @@ mod tests {
 
     fn get_sample_mantaray_node() -> (MantarayNode, Vec<&'static [u8]>) {
         let mut node = MantarayNode {
-            node_type: None,
+            node_type: 0,
             obfuscation_key: None,
             content_address: None,
             entry: ZERO_BYTES.to_vec(),
