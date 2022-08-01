@@ -588,7 +588,7 @@ impl MantarayNode {
         // obfuscation key
         output.extend(self.obfuscation_key);
         // version hash
-        output.append(&mut hex::decode(VERSION_HASH_02).unwrap());
+        output.append(&mut hex::decode(&VERSION_HASH_02[..VERSION_HASH_02.len() - 2]).unwrap());
         // reference length bytes
         output.push(match self.entry.is_empty() {
             false => match self.entry.len() {
@@ -634,11 +634,11 @@ impl MantarayNode {
             &data[NHS_OBFUSCATION_KEY as usize..(NHS_OBFUSCATION_KEY + NHS_VERSION_HASH) as usize],
         );
 
-        if version_hash == VERSION_HASH_01 {
+        if version_hash == VERSION_HASH_01[..VERSION_HASH_01.len() - 2] {
             return Err("mantaray:0.1 is not implemented");
         }
 
-        if version_hash == VERSION_HASH_02 {
+        if version_hash == VERSION_HASH_02[..VERSION_HASH_02.len() - 2] {
             let ref_bytes_size = &data[nhs - 1];
             let mut entry = &data[nhs..nhs + *ref_bytes_size as usize];
 
