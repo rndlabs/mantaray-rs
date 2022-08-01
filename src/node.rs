@@ -48,7 +48,7 @@ pub struct WithMetadataOptions {
     metadata_byte_size: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MantarayFork {
     prefix: Vec<u8>,
     node: MantarayNode,
@@ -124,7 +124,7 @@ impl MantarayFork {
 
                     MantarayNode {
                         node_type,
-                        obfuscation_key: Some(obfuscation_key),
+                        obfuscation_key,
                         content_address: None,
                         entry: entry.to_vec(),
                         metadata: map,
@@ -142,7 +142,7 @@ impl MantarayFork {
 
                 MantarayNode {
                     node_type,
-                    obfuscation_key: Some(obfuscation_key),
+                    obfuscation_key,
                     content_address: None,
                     entry: entry.to_vec(),
                     metadata: HashMap::<String, String>::new(),
@@ -155,10 +155,10 @@ impl MantarayFork {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MantarayNode {
     node_type: u8,
-    obfuscation_key: Option<[u8; 32]>,
+    obfuscation_key: [u8; 32],
     content_address: Option<Vec<u8>>,
     entry: Vec<u8>,
     metadata: HashMap<String, String>,
@@ -241,7 +241,7 @@ impl MantarayNode {
         self.node_type
     }
 
-    pub fn obfuscation_key(&self) -> &Option<[u8; 32]> {
+    pub fn obfuscation_key(&self) -> &[u8; 32] {
         &self.obfuscation_key
     }
 
@@ -289,7 +289,7 @@ impl MantarayNode {
     }
 
     pub fn set_obfuscation_key(&mut self, obfuscation_key: [u8; 32]) {
-        self.obfuscation_key = Some(obfuscation_key);
+        self.obfuscation_key = obfuscation_key;
         self.make_dirty();
     }
 
@@ -586,10 +586,7 @@ impl MantarayNode {
 
         let mut output = Vec::new();
         // obfuscation key
-        match self.obfuscation_key() {
-            Some(k) => output.extend(k.iter()),
-            None => output.extend(ZERO_BYTES.iter()),
-        };
+        output.extend(self.obfuscation_key);
         // version hash
         output.append(&mut hex::decode(VERSION_HASH_02).unwrap());
         // reference length bytes
@@ -619,7 +616,7 @@ impl MantarayNode {
 
         // encryption
         // perform XOR encryption on bytes after obfuscation key
-        encrypt_decrypt(&self.obfuscation_key().unwrap(), &mut output);
+        encrypt_decrypt(self.obfuscation_key(), &mut output);
 
         output
     }
@@ -731,7 +728,7 @@ impl MantarayNode {
                     true => NT_EDGE,
                     false => 0,
                 },
-                obfuscation_key: Some(obfuscation_key.as_slice().try_into().unwrap()),
+                obfuscation_key: obfuscation_key.as_slice().try_into().unwrap(),
                 content_address: None,
                 entry: ZERO_BYTES.to_vec(),
                 metadata: HashMap::new(),
@@ -757,7 +754,7 @@ mod tests {
     fn get_sample_mantaray_node() -> (MantarayNode, Vec<&'static [u8]>) {
         let mut node = MantarayNode {
             node_type: 0,
-            obfuscation_key: None,
+            obfuscation_key: ZERO_BYTES,
             content_address: None,
             entry: ZERO_BYTES.to_vec(),
             metadata: HashMap::new(),
