@@ -182,7 +182,7 @@ fn find_index_of_array(element: &[u8], search_for: &[u8]) -> Result<usize, ()> {
     for i in 0..=iterations {
         let mut j = 0;
         loop {
-            if element[i + j] != search_for[j] {
+            if (i+j) == element.len() || j == search_for.len() || element[i + j] != search_for[j] {
                 break;
             }
 
@@ -201,7 +201,7 @@ fn common<'a>(a: &'a [u8], b: &'a [u8]) -> &'a [u8] {
     let mut idx = 0;
 
     loop {
-        if a[idx] == b[idx] {
+        if idx < a.len() && idx < b.len() && a[idx] == b[idx] {
             idx += 1;
         } else {
             break;
