@@ -842,6 +842,14 @@ mod tests {
         let node_compare = MantarayNode::deserialize(&mut serialised);
 
         assert_eq!(node.entry, node_compare.unwrap().entry);
+
+        let (node, _) = get_sample_mantaray_node();
+
+        let mut serialised = node.serialize();
+
+        let node_compare = MantarayNode::deserialize(&mut serialised);
+
+        assert_eq!(node.entry, node_compare.unwrap().entry);
     }
 
     #[test]
