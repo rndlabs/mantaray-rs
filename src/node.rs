@@ -64,8 +64,7 @@ impl MantarayFork {
         output.push(self.prefix.len() as u8);
         // prefix bytes
 
-        let mut prefix_output: [u8; NFS_PREFIX_MAX_SIZE] =
-            [0; NFS_PREFIX_MAX_SIZE];
+        let mut prefix_output: [u8; NFS_PREFIX_MAX_SIZE] = [0; NFS_PREFIX_MAX_SIZE];
         prefix_output[..self.prefix.len()].copy_from_slice(&self.prefix);
 
         // content address
@@ -103,20 +102,18 @@ impl MantarayFork {
             );
         }
 
-        let prefix =
-            &data[NFS_HEADER..NFS_HEADER + prefix_length].to_vec();
+        let prefix = &data[NFS_HEADER..NFS_HEADER + prefix_length].to_vec();
 
         let node = match options {
             Some(metadata_options) => {
                 if metadata_options.metadata_byte_size > 0 {
-                    let entry = data[NFS_PRE_REFERENCE
-                        ..NFS_PRE_REFERENCE + metadata_options.ref_bytes_size]
+                    let entry = data
+                        [NFS_PRE_REFERENCE..NFS_PRE_REFERENCE + metadata_options.ref_bytes_size]
                         .to_owned()
                         .into_boxed_slice();
 
-                    let start_metadata: usize = NFS_PRE_REFERENCE
-                        + metadata_options.ref_bytes_size
-                        + NFS_METADATA;
+                    let start_metadata: usize =
+                        NFS_PRE_REFERENCE + metadata_options.ref_bytes_size + NFS_METADATA;
                     let metadata_bytes =
                         &data[start_metadata..start_metadata + metadata_options.metadata_byte_size];
                     let map: HashMap<String, String> =
@@ -139,9 +136,7 @@ impl MantarayFork {
             }
             None => {
                 let entry = match data.len() - NFS_PRE_REFERENCE {
-                    32 | 64 => data[NFS_PRE_REFERENCE..]
-                        .to_owned()
-                        .into_boxed_slice(),
+                    32 | 64 => data[NFS_PRE_REFERENCE..].to_owned().into_boxed_slice(),
                     _ => panic!("Invalid"),
                 };
 
@@ -661,9 +656,8 @@ impl MantarayNode {
         let obfuscation_key = &data[0..NHS_OBFUSCATION_KEY].to_owned();
         encrypt_decrypt(obfuscation_key, data);
 
-        let version_hash = hex::encode(
-            &data[NHS_OBFUSCATION_KEY..NHS_OBFUSCATION_KEY + NHS_VERSION_HASH],
-        );
+        let version_hash =
+            hex::encode(&data[NHS_OBFUSCATION_KEY..NHS_OBFUSCATION_KEY + NHS_VERSION_HASH]);
 
         if version_hash == VERSION_HASH_01[..VERSION_HASH_01.len() - 2] {
             return Err("mantaray:0.1 is not implemented");
@@ -703,7 +697,8 @@ impl MantarayNode {
                     }
 
                     let node_type = &data[offset..offset + NFS_NODE_TYPE];
-                    let mut node_fork_size: u16 = (NFS_PRE_REFERENCE as u8 + *ref_bytes_size) as u16;
+                    let mut node_fork_size: u16 =
+                        (NFS_PRE_REFERENCE as u8 + *ref_bytes_size) as u16;
 
                     if Self::node_type_is_with_metadata_type(&node_type[0]) {
                         if data.len()
@@ -736,7 +731,9 @@ impl MantarayNode {
                             ),
                         );
                     } else {
-                        if data.len() < offset + (NFS_PRE_REFERENCE + *ref_bytes_size as usize) as usize {
+                        if data.len()
+                            < offset + (NFS_PRE_REFERENCE + *ref_bytes_size as usize) as usize
+                        {
                             panic!("There is not enough size to read fork at offset {}", offset);
                         }
 
