@@ -391,110 +391,97 @@ impl MantarayNode {
             return;
         }
 
-        if !self.forks.contains_key(&path[0]) {
-            match path.len() > NFS_PREFIX_MAX_SIZE.into() {
-                true => {
-                    let prefix = &path[0..NFS_PREFIX_MAX_SIZE as usize];
-                    let rest = &path[NFS_PREFIX_MAX_SIZE as usize..];
+        let obfuscation_key = self.obfuscation_key;
 
-                    let mut node = MantarayNode {
-                        node_type: None,
-                        obfuscation_key: *self.obfuscation_key(),
+        let (path, fork) = match self.forks.get_mut(&path[0]) {
+            None => {
+                match path.len() > NFS_PREFIX_MAX_SIZE.into() {
+                    true => {
+                        let prefix = &path[0..NFS_PREFIX_MAX_SIZE as usize];
+                        let rest = &path[NFS_PREFIX_MAX_SIZE as usize..];
+    
+                        let mut node = MantarayNode {
+                            node_type: 0,
+                            obfuscation_key,
+                            content_address: None,
+                            entry: ZERO_BYTES.to_vec(),
+                            metadata: HashMap::<String, String>::new(),
+                            forks: HashMap::<u8, MantarayFork>::new(),
+                        };
+    
+                        node.add_fork(rest, entry, metadata);
+                        node.update_with_path_separator(prefix);
+                        
+                        (path[0], MantarayFork { prefix: prefix.to_vec(), node })
+                    }
+                    false => {
+                        let mut node = MantarayNode {
+                            node_type: 0,
+                            obfuscation_key,
+                            content_address: None,
+                            entry: entry.to_vec(),
+                            metadata,
+                            forks: HashMap::<u8, MantarayFork>::new(),
+                        };
+    
+                        node.update_with_path_separator(path);
+
+                        (path[0], MantarayFork { prefix: path.to_vec(), node })
+                    }
+                }
+            },
+            Some(fork) => {
+                let common_path = common(&fork.prefix, path);
+                let rest_path = &fork.prefix[common_path.len()..];
+
+                let node_clone = fork.node.clone();
+                let mut new_node = fork.node.clone();
+
+                if !rest_path.is_empty() {
+                    // move current common prefix node
+                    new_node = MantarayNode {
+                        node_type: 0,
+                        obfuscation_key,
                         content_address: None,
                         entry: ZERO_BYTES.to_vec(),
                         metadata: HashMap::<String, String>::new(),
                         forks: HashMap::<u8, MantarayFork>::new(),
                     };
 
-                    node.add_fork(rest, entry, metadata);
-                    node.update_with_path_separator(prefix);
+                    fork.node.update_with_path_separator(rest_path);
 
-                    self.forks.insert(
-                        path[0],
+                    new_node.forks.insert(
+                        rest_path[0],
                         MantarayFork {
-                            prefix: prefix.to_vec(),
-                            node,
+                            prefix: rest_path.to_vec(),
+                            node: node_clone,
                         },
                     );
-                    self.make_dirty();
-                    self.make_edge();
+
+                    new_node.make_edge();
+
+                    // if common path is full path new node is value type
+                    if path.len() == common_path.len() {
+                        new_node.make_value();
+                    }
                 }
-                false => {
-                    let mut node = MantarayNode {
-                        node_type: None,
-                        obfuscation_key: *self.obfuscation_key(),
-                        content_address: None,
-                        entry: entry.to_vec(),
-                        metadata,
-                        forks: HashMap::<u8, MantarayFork>::new(),
-                    };
 
-                    node.update_with_path_separator(path);
-                    self.forks.insert(
-                        path[0],
-                        MantarayFork {
-                            prefix: path.to_vec(),
-                            node,
-                        },
-                    );
-                    self.make_dirty();
-                    self.make_edge();
-                }
-            };
-        } else {
-            let fork = self.forks.get(&path[0]);
-            let fork_prefix = &fork.unwrap().prefix;
-            let common_path = common(fork_prefix, path);
-            let rest_path = &fork_prefix[common_path.len()..];
+                // NOTE: special case on edge split
+                // new_node will be the common path edge node
+                // TODO: change it on the bee side! -> new_node is the edge (parent) node of the newly
+                // created path, so `common_path` should be passed instead of `path`.
+                new_node.update_with_path_separator(common_path);
+                // new_node's prefix is a subset of the given `path`, here the desire fork will be added
+                // with the truncated path
+                new_node.add_fork(&path[common_path.len()..], entry, metadata);
 
-            let mut new_node = fork.unwrap().node.clone();
+                (path[0], MantarayFork { prefix: common_path.to_vec(), node: new_node,})
+            },
+        };
 
-            if !rest_path.is_empty() {
-                // move current common prefix node
-                let new_node = &mut MantarayNode {
-                    node_type: None,
-                    obfuscation_key: *self.obfuscation_key(),
-                    content_address: None,
-                    entry: ZERO_BYTES.to_vec(),
-                    metadata: HashMap::<String, String>::new(),
-                    forks: HashMap::<u8, MantarayFork>::new(),
-                };
-
-                new_node.forks.insert(
-                    rest_path[0],
-                    MantarayFork {
-                        prefix: rest_path.to_vec(),
-                        node: fork.unwrap().node.clone(),
-                    },
-                );
-
-                new_node.make_edge();
-
-                // if common path is full path new node is vlaue type
-                if path.len() == common_path.len() {
-                    new_node.make_value();
-                }
-            }
-
-            // NOTE: special case on edge split
-            // new_node will be the common path edge node
-            // TODO: change it on the bee side! -> new_node is the edge (parent) node of the newly
-            // created path, so `common_path` should be passed instead of `path`.
-            new_node.update_with_path_separator(common_path);
-            // new_node's prefix is a subset of the given `path`, here the desire fork will be added
-            // with the truncated path
-            new_node.add_fork(&path[common_path.len()..], entry, metadata);
-
-            self.forks.insert(
-                path[0],
-                MantarayFork {
-                    prefix: common_path.to_vec(),
-                    node: new_node,
-                },
-            );
-            self.make_edge();
-            self.make_dirty();
-        }
+        self.forks.insert(path, fork);
+        self.make_edge();
+        self.make_dirty();
     }
 
     pub fn get_fork_at_path(&self, path: &[u8]) -> &MantarayFork {
