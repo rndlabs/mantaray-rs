@@ -750,8 +750,7 @@ mod tests {
     use super::*;
     use rand::Rng;
 
-
-    fn get_sample_mantaray_node() -> (MantarayNode, Vec<&'static [u8]>) {
+    fn get_sample_mantaray_node() -> (MantarayNode, Vec<Vec<u8>>) {
         let mut node = MantarayNode {
             node_type: 0,
             obfuscation_key: ZERO_BYTES,
@@ -780,27 +779,113 @@ mod tests {
         node.add_fork(path4.as_bytes(), &rand_address, path4_metadata);
         node.add_fork(path5.as_bytes(), &rand_address, HashMap::<String, String>::new());
 
-        (node, vec![path1.as_bytes(), path2.as_bytes(), path3.as_bytes(), path4.as_bytes(), path5.as_bytes()])
+        (node, vec![path1.as_bytes().to_vec(), path2.as_bytes().to_vec(), path3.as_bytes().to_vec(), path4.as_bytes().to_vec(), path5.as_bytes().to_vec()])
+    }
+
+    #[test]
+    fn serde() {
+        let mut node = MantarayNode {
+            node_type: 0,
+            obfuscation_key: ZERO_BYTES,
+            content_address: None,
+            entry: ZERO_BYTES.to_vec(),
+            metadata: HashMap::new(),
+            forks: HashMap::new(),
+        };
+
+        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
+        node.set_entry(rand_address.as_slice());
+
+        let mut serialised = node.serialize();
+        eprintln!("{:x?}", serialised);
+
+        let node_compare = MantarayNode::deserialize(&mut serialised);
+
+        assert_eq!(node.entry, node_compare.unwrap().en);
+    }
+
+    #[test]
+    fn node_structure_check() {
+        let (node, paths) = get_sample_mantaray_node();
+
+        assert_eq!(node.forks.keys().cloned().collect::<Vec<u8>>(), vec![paths[0][0]]);
+        let second_level_fork = node.forks.get(&paths[4][0]).unwrap();
+        assert_eq!(second_level_fork.prefix, "path".as_bytes());
+        let second_level_node = &second_level_fork.node;
+        let mut second_level_node_keys = second_level_node.forks.keys().cloned().collect::<Vec<u8>>();
+        second_level_node_keys.sort();
+        assert_eq!(second_level_node_keys, vec![paths[0][4],paths[4][4]]);
+        let third_level_fork_2 = second_level_node.forks.get(&paths[4][4]).unwrap();
+        assert_eq!(third_level_fork_2.prefix, vec![paths[4][4]]);
+        let third_level_fork_1 = second_level_node.forks.get(&paths[0][4]).unwrap();
+        assert_eq!(third_level_fork_1.prefix, Vec::from("1/valami".as_bytes()));
+        let third_level_node_1 = &third_level_fork_1.node;
+        let mut third_level_node_keys = third_level_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+        third_level_node_keys.sort();
+        assert_eq!(third_level_node_keys, vec![paths[0][12]]);
+        let fourth_level_fork_1 = third_level_node_1.forks.get(&paths[0][12]).unwrap();
+        assert_eq!(fourth_level_fork_1.prefix, vec![paths[0][12]]);
+        let fourth_level_node_1 = &fourth_level_fork_1.node;
+        let mut fourth_level_node_keys = fourth_level_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+        fourth_level_node_keys.sort();
+        assert_eq!(fourth_level_node_keys, vec![paths[0][13], paths[1][13]]);
+        let fifth_level_fork_2 = fourth_level_node_1.forks.get(&paths[1][13]).unwrap();
+        assert_eq!(fifth_level_fork_2.prefix, Vec::from("masodik".as_bytes()));
+        let fifth_level_node_2 = &fifth_level_fork_2.node;
+        let mut fifth_level_node_keys = fifth_level_node_2.forks.keys().cloned().collect::<Vec<u8>>();
+        fifth_level_node_keys.sort();
+        assert_eq!(fifth_level_node_keys, vec![paths[2][20]]);
+        let sixth_level_node_1 = fifth_level_node_2.forks.get(&paths[2][20]).unwrap();
+        assert_eq!(sixth_level_node_1.prefix, Vec::from(".ext".as_bytes()));
+    }
+
+    #[test]
+    #[should_panic(expected = "Path has not been found in the manifest. Remaining path on lookup: /not/exists")]
+    fn get_fork_at_path_panic() {
+        let (node, _) = get_sample_mantaray_node();
+        node.get_fork_at_path("path/not/exists".as_bytes());
     }
 
     #[test]
     fn get_fork_at_path() {
-        let (node, _) = get_sample_mantaray_node();
+        let (node, paths) = get_sample_mantaray_node();
 
         // no separator in the descendants
         let fork1 = node.get_fork_at_path(String::from("path1/valami/").as_bytes());
         assert_eq!(MantarayNode::check_for_separator(&fork1.node), false);
 
+        // separator in the descendants
+        let fork2 = node.get_fork_at_path(&paths[3]);
+        assert_eq!(MantarayNode::check_for_separator(&fork2.node), true);
+
+        // no separator in the descendants, no forks
+        let fork3 = node.get_fork_at_path(&paths[4]);
+        assert_eq!(MantarayNode::check_for_separator(&fork3.node), false);
+
     }
 
     #[test]
-    fn hashmap_json() {
-        let mut test_map: HashMap<String, String> = HashMap::new();
+    #[should_panic(expected = "Path has not been found in the manifest")]
+    fn remove_path_panic() {
+        let (mut node, _) = get_sample_mantaray_node();
+        node.remove_path(vec![0, 1, 2]);
+    }
 
-        test_map.insert(String::from("website-document"), String::from("test.html"));
+    #[test]
+    fn remove_path() {
+        let (mut node, paths) = get_sample_mantaray_node();
+        let check_node_1 = node.get_fork_at_path(&Vec::from("path1/valami/".as_bytes())).node.clone();
 
-        let json = serde_json::to_string(&test_map);
-        println!("{}", json.unwrap());
-        // assert_eq!(result, 4);
+        // current forks of node
+        let mut check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+        check_node_keys.sort();
+        assert_eq!(check_node_keys, vec![paths[0][13], paths[1][13]]);
+
+        node.remove_path(paths[1][..].to_vec());
+        let check_node_1 = node.get_fork_at_path(&Vec::from("path1/valami/".as_bytes())).node.clone();
+        // 'm' key of prefix table disappeared
+        let check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+
+        assert_eq!(check_node_keys, vec![paths[0][13]]);
     }
 }
