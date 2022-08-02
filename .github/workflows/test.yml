@@ -2,6 +2,16 @@ on: [push, pull_request]
 
 name: CICD
 
+env:
+  WORKERS: 4
+  BEE_VERSION: '1.7.0'
+  BLOCKCHAIN_VERSION: '1.2.0'
+  BEE_ENV_PREFIX: 'swarm-test'
+  BEE_IMAGE_PREFIX: 'docker.pkg.github.com/ethersphere/bee-factory'
+  COMMIT_VERSION_TAG: 'false'
+  BEE_API_URL: 'http://127.0.0.1:1633'
+  BEE_DEBUG_API_URL: 'http://127.0.0.1:1635'
+
 jobs:
   lint:
     name: lint
@@ -72,7 +82,13 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
-      
+
+      - uses: Start Bee Factory environment
+        run: |
+          git clone --depth=1 https://github.com/fairDataSociety/bee-factory.git
+          chmod +x -R ./bee-factory/scripts
+          ./bee-factory/scripts/environment.sh start --detach --workers=$WORKERS
+
       - uses: actions-rs/cargo@v1
         with:
           command: test
