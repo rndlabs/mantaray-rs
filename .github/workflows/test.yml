@@ -83,7 +83,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - uses: Start Bee Factory environment
+      - name: Start Bee Factory environment
         run: |
           git clone --depth=1 https://github.com/fairDataSociety/bee-factory.git
           chmod +x -R ./bee-factory/scripts
