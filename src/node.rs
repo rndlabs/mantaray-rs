@@ -37,9 +37,9 @@ const VERSION_HASH_01: &str = "025184789d63635766d78c41900196b57d7400875ebe4d9b5
 // pre-calculated version string, Keccak-256
 const VERSION_HASH_02: &str = "5768b3b6a7db56d21d1abff40d41cebfc83448fed8d7e9b06ec0d3b073f28f7b";
 
-const ZERO_BYTES: [u8; 32] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-];
+// zero byte u8 array 32 bytes long
+const ZERO_BYTES: [u8; 32] = [0; 32];
+
 
 pub struct WithMetadataOptions {
     ref_bytes_size: usize,
@@ -60,17 +60,16 @@ impl MantarayFork {
         output.push(self.node.node_type);
         // prefix_length
         output.push(self.prefix.len() as u8);
-        // prefix bytes
 
+        // prefix bytes
         let mut prefix_output: [u8; NFS_PREFIX_MAX_SIZE] = [0; NFS_PREFIX_MAX_SIZE];
         prefix_output[..self.prefix.len()].copy_from_slice(&self.prefix);
 
-        // content address
-        match &self.node.content_address {
-            Some(t) => output.extend(t.iter()),
-            None => {
-                panic!("Cannot serialize MantarayFork because it does not have a content address")
-            }
+        // if content address length is 32 or 64, add to output vector
+        if self.node.content_address.len() == 32 || self.node.content_address.len() == 64 {
+            output.extend_from_slice(&self.node.content_address);
+        } else {
+            panic!("Cannot serialize MantarayFork because it does not have a content address");
         }
 
         // metadata
@@ -123,7 +122,7 @@ impl MantarayFork {
                     MantarayNode {
                         node_type,
                         obfuscation_key,
-                        content_address: None,
+                        content_address: [].to_vec(),
                         entry: entry.to_vec(),
                         metadata: map,
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -141,7 +140,7 @@ impl MantarayFork {
                 MantarayNode {
                     node_type,
                     obfuscation_key,
-                    content_address: None,
+                    content_address: [].to_vec(),
                     entry: entry.to_vec(),
                     metadata: HashMap::<String, String>::new(),
                     forks: HashMap::<u8, MantarayFork>::new(),
@@ -160,58 +159,43 @@ impl MantarayFork {
 pub struct MantarayNode {
     node_type: u8,
     obfuscation_key: [u8; 32],
-    content_address: Option<Vec<u8>>,
+    content_address: Vec<u8>,
     entry: Vec<u8>,
     metadata: HashMap<String, String>,
     forks: HashMap<u8, MantarayFork>,
 }
 
+// determine if a buffer of bytes is all equal to zero
 fn is_zero_bytes(buffer: &[u8]) -> bool {
-    let (prefix, aligned, suffix) = unsafe { buffer.align_to::<u64>() };
-
-    prefix.iter().all(|&x| x == 0)
-        && suffix.iter().all(|&x| x == 0)
-        && aligned.iter().all(|&x| x == 0)
+    buffer.iter().all(|&b| b == 0)
 }
 
 fn is_reference(buffer: &[u8]) -> bool {
     buffer.len() == 32 || buffer.len() == 64
 }
 
-fn find_index_of_array(element: &[u8], search_for: &[u8]) -> Result<usize, ()> {
-    eprintln!("Searching in {:?} for {:?}", element, search_for);
-    let iterations = element.len() - search_for.len();
-    for i in 0..=iterations {
-        let mut j = 0;
-        loop {
-            if (i + j) == element.len() || j == search_for.len() || element[i + j] != search_for[j]
-            {
-                break;
+// find the index at which a subslice exists within a slice
+fn find_index_of_array(slice: &[u8], subslice: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    while i <= slice.len() - subslice.len() {
+        if slice[i..i + subslice.len()].to_vec() == subslice.to_vec() {
+            return Some(i);
             }
-
-            j += 1;
+        i += 1;
         }
-
-        if j == search_for.len() {
-            return Ok(i);
-        }
+    None
     }
 
-    Err(())
-}
-
-fn common<'a>(a: &'a [u8], b: &'a [u8]) -> &'a [u8] {
-    let mut idx = 0;
-
-    loop {
-        if idx < a.len() && idx < b.len() && a[idx] == b[idx] {
-            idx += 1;
-        } else {
+// return the common part of two slices starting from index 0
+fn common(slice: &[u8], subslice: &[u8]) -> Vec<u8> {
+    let mut i = 0;
+    while i < slice.len() && i < subslice.len() {
+        if slice[i] != subslice[i] {
             break;
         }
+        i += 1;
     }
-
-    &a[0..idx]
+    slice[0..i].to_vec()
 }
 
 fn encrypt_decrypt(key: &[u8], data: &mut [u8]) {
@@ -219,20 +203,13 @@ fn encrypt_decrypt(key: &[u8], data: &mut [u8]) {
         return;
     }
 
-    if data.len() % key.len() != 0 {
-        panic!("Data must be a multiple of key length");
-    }
-
     if key.len() != NHS_OBFUSCATION_KEY {
         panic!("Invalid key length");
     }
 
-    data.chunks_exact_mut(32).into_iter().for_each(|chunk| {
-        chunk
-            .iter_mut()
-            .zip(key.iter())
-            .for_each(|(x1, x2)| *x1 ^= *x2)
-    });
+    for i in 0..data.len() {
+        data[i] ^= key[i % key.len()];
+    }
 }
 
 impl MantarayNode {
@@ -245,7 +222,7 @@ impl MantarayNode {
         &self.obfuscation_key
     }
 
-    pub fn content_address(&self) -> &Option<Vec<u8>> {
+    pub fn content_address(&self) -> &[u8] {
         &self.content_address
     }
 
@@ -257,17 +234,13 @@ impl MantarayNode {
         &self.metadata
     }
 
-    // fn forks(&self) -> &HashMap<u64, MantarayFork> {
-    //     &self.forks
-    // }
-
     // mutable access
-    pub fn set_content_address(&mut self, content_address: Vec<u8>) {
-        if !is_reference(&content_address) {
+    pub fn set_content_address(&mut self, content_address: &[u8]) {
+        if !is_reference(content_address) {
             panic!("Wrong reference length. Entry only can be 32 or 64 length in bytes");
         }
 
-        self.content_address = Some(content_address);
+        self.content_address = content_address.to_vec();
     }
 
     pub fn set_entry(&mut self, entry: &[u8]) {
@@ -361,14 +334,14 @@ impl MantarayNode {
     }
 
     fn update_with_path_separator(&mut self, path: &[u8]) {
-        // TODO: it is not clearwhy the `withPathSeparator` is not related to the first path element - should
+        // TODO: it is not clear why the `withPathSeparator` is not related to the first path element - should
         // get info about it.
         let path = match String::from_utf8(path.to_vec()) {
             Ok(s) => s,
             Err(_) => panic!("Decoding of string is malformed"),
         };
 
-        eprintln!("Path is: {}", path);
+        // eprintln!("Path is: {}", path);
 
         match path.find(PATH_SEPARATOR) {
             Some(_) => self.make_with_path_separator(),
@@ -402,7 +375,7 @@ impl MantarayNode {
                     let mut node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: None,
+                        content_address: [].to_vec(),
                         entry: ZERO_BYTES.to_vec(),
                         metadata: HashMap::<String, String>::new(),
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -423,7 +396,7 @@ impl MantarayNode {
                     let mut node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: None,
+                        content_address: [].to_vec(),
                         entry: entry.to_vec(),
                         metadata,
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -452,7 +425,7 @@ impl MantarayNode {
                     new_node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: None,
+                        content_address: [].to_vec(),
                         entry: ZERO_BYTES.to_vec(),
                         metadata: HashMap::<String, String>::new(),
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -480,7 +453,7 @@ impl MantarayNode {
                 // new_node will be the common path edge node
                 // TODO: change it on the bee side! -> new_node is the edge (parent) node of the newly
                 // created path, so `common_path` should be passed instead of `path`.
-                new_node.update_with_path_separator(common_path);
+                new_node.update_with_path_separator(&common_path);
                 // new_node's prefix is a subset of the given `path`, here the desire fork will be added
                 // with the truncated path
                 new_node.add_fork(&path[common_path.len()..], entry, metadata);
@@ -506,15 +479,13 @@ impl MantarayNode {
         }
 
         let fork = self.forks.get(&path[0]);
-        eprintln!("Forks: {:?}", self.forks);
-        eprintln!("Tried to lookup: {:?}", &path[0]);
 
         match fork {
             Some(f) => {
                 let prefix_index = find_index_of_array(path, &fork.unwrap().prefix);
 
                 match prefix_index {
-                    Ok(_) => {
+                    Some(_) => {
                         let rest = &path[f.prefix.len()..];
                         if rest.is_empty() {
                             f
@@ -522,7 +493,7 @@ impl MantarayNode {
                             fork.unwrap().node.get_fork_at_path(rest)
                         }
                     }
-                    Err(_) => {
+                    None => {
                         panic!(
                             "Path has not been found in the manifest. Remaining path on lookup {} on prefix: {}", 
                             String::from_utf8(path[..].to_vec()).unwrap(),
@@ -543,14 +514,17 @@ impl MantarayNode {
             panic!("Empty path");
         }
 
-        let mut fork = self.forks.get_mut(&path[0]);
+        if self.forks.is_empty() {
+            panic!("Fork mapping is not defined in the manifest");
+        }
+
+        let fork = self.forks.get_mut(&path[0]);
 
         match fork {
-            Some(ref mut f) => {
-                let prefix_index = find_index_of_array(&path, &f.prefix.clone());
-
+            Some(f) => {
+                let prefix_index = find_index_of_array(&path, &f.prefix);
                 match prefix_index {
-                    Ok(_) => {
+                    Some(_) => {
                         let rest = &path[f.prefix.len()..];
                         if rest.is_empty() {
                             // full path matched
@@ -560,7 +534,7 @@ impl MantarayNode {
                             f.node.remove_path(rest.to_vec())
                         }
                     }
-                    Err(_) => {
+                    None => {
                         panic!(
                             "Path has not been found in the manifest. Remaining path on lookup {} on prefix: {}", 
                             String::from_utf8(path[..].to_vec()).unwrap(),
@@ -577,16 +551,16 @@ impl MantarayNode {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.content_address.is_none()
+        self.content_address.is_empty()
     }
 
     pub fn make_dirty(&mut self) {
-        self.content_address = None
+        self.content_address = [].to_vec()
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Result<Vec<u8>, String> {
         if self.forks.is_empty() && self.entry.is_empty() {
-            panic!("entry field is not initialized");
+            return Err("Entry field is empty".to_string());
         }
 
         let mut idx: BitArr!(for 256, in u8) = BitArray::<_>::ZERO;
@@ -598,7 +572,12 @@ impl MantarayNode {
         for i in 0..idx.first_zero().unwrap() {
             match self.forks.get(&(i as u8)) {
                 Some(fork) => fork_serializations.push(fork.serialize()),
-                None => panic!("Fork indexing error: fork has not found under {} index", i),
+                None => {
+                    return Err(format!(
+                        "Fork indexing error: fork was not found under {} index",
+                        i
+                    ));
+                }
             }
         }
 
@@ -612,7 +591,7 @@ impl MantarayNode {
             false => match self.entry.len() {
                 32 => 32,
                 64 => 64,
-                t => panic!("Wrong reference length. It can only be 32 or 64. Got {}", t),
+                t => return Err(format!("Invalid entry length: {}", t)),
             },
             true => 32,
         });
@@ -623,35 +602,32 @@ impl MantarayNode {
             output.extend(self.entry.iter());
         }
 
-        // index bytes
-        output.append(&mut idx.as_raw_mut_slice().to_vec());
-        // forks
-        output.extend(
-            fork_serializations
-                .into_iter()
-                .flat_map(|f| f[..].to_owned()),
-        );
+        // add index bytes to output
+        output.extend(idx.iter().map(|b| *b as u8));
+
+        // add fork serializations to output
+        output.extend(fork_serializations.iter().flat_map(|f| f.iter()));
 
         // encryption
         // perform XOR encryption on bytes after obfuscation key
-        encrypt_decrypt(self.obfuscation_key(), &mut output);
+        encrypt_decrypt(self.obfuscation_key(), &mut output[NHS_OBFUSCATION_KEY..]);
 
-        output
+        Ok(output)
     }
 
-    pub fn deserialize(data: &mut [u8]) -> Result<MantarayNode, &str> {
+    pub fn deserialize(data: &mut [u8]) -> Result<MantarayNode, String> {
         if data.len() < NHS_FULL {
-            return Err("The serialised intput is too short");
+            return Err("The serialised intput is too short".to_string());
         }
 
         let obfuscation_key = &data[0..NHS_OBFUSCATION_KEY].to_owned();
-        encrypt_decrypt(obfuscation_key, data);
+        encrypt_decrypt(obfuscation_key, &mut data[NHS_OBFUSCATION_KEY..]);
 
         let version_hash =
             hex::encode(&data[NHS_OBFUSCATION_KEY..NHS_OBFUSCATION_KEY + NHS_VERSION_HASH]);
 
         if version_hash == VERSION_HASH_01[..VERSION_HASH_01.len() - 2] {
-            return Err("mantaray:0.1 is not implemented");
+            return Err("mantaray:0.1 is not implemented".to_string());
         }
 
         if version_hash == VERSION_HASH_02[..VERSION_HASH_02.len() - 2] {
@@ -704,7 +680,7 @@ impl MantarayNode {
                             .try_into()
                         {
                             Ok(bytes) => *bytes,
-                            Err(_) => return Err("metadata size malformed"),
+                            Err(_) => return Err("metadata size malformed".to_string()),
                         };
 
                         let metadata_size: u16 = u16::from_be_bytes(metadata_size_bytes);
@@ -748,7 +724,7 @@ impl MantarayNode {
                     false => 0,
                 },
                 obfuscation_key: obfuscation_key.as_slice().try_into().unwrap(),
-                content_address: None,
+                content_address: [].to_vec(),
                 entry: ZERO_BYTES.to_vec(),
                 metadata: HashMap::new(),
                 forks,
@@ -759,7 +735,8 @@ impl MantarayNode {
             return Ok(node);
         }
 
-        Err("Wrong mantaray version")
+        Err("Wrong mantaray version".to_string())
+    }
     }
 }
 
@@ -769,18 +746,17 @@ mod tests {
     use super::*;
     use rand::Rng;
 
-    fn get_sample_mantaray_node() -> (MantarayNode, Vec<Vec<u8>>) {
+    pub fn get_sample_mantaray_node() -> (MantarayNode, Vec<Vec<u8>>) {
+        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
+
         let mut node = MantarayNode {
             node_type: 0,
             obfuscation_key: ZERO_BYTES,
-            content_address: None,
-            entry: ZERO_BYTES.to_vec(),
+            content_address: [].to_vec(),
+            entry: rand_address.as_slice().to_vec(),
             metadata: HashMap::new(),
             forks: HashMap::new(),
         };
-
-        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
-        node.set_entry(rand_address.as_slice());
 
         let path1 = "path1/valami/elso";
         let path2 = "path1/valami/masodik";
@@ -824,30 +800,28 @@ mod tests {
 
     #[test]
     fn serde() {
-        let mut node = MantarayNode {
+        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
+        let node = MantarayNode {
             node_type: 0,
             obfuscation_key: ZERO_BYTES,
-            content_address: None,
-            entry: ZERO_BYTES.to_vec(),
+            content_address: [].to_vec(),
+            entry: rand_address.as_slice().to_vec(),
             metadata: HashMap::new(),
             forks: HashMap::new(),
         };
 
-        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
-        node.set_entry(rand_address.as_slice());
-
-        let mut serialised = node.serialize();
+        let serialised = node.serialize();
         eprintln!("{:x?}", serialised);
 
-        let node_compare = MantarayNode::deserialize(&mut serialised);
+        let node_compare = MantarayNode::deserialize(&mut serialised.unwrap());
 
         assert_eq!(node.entry, node_compare.unwrap().entry);
 
         let (node, _) = get_sample_mantaray_node();
 
-        let mut serialised = node.serialize();
+        let serialised = node.serialize();
 
-        let node_compare = MantarayNode::deserialize(&mut serialised);
+        let node_compare = MantarayNode::deserialize(&mut serialised.unwrap());
 
         assert_eq!(node.entry, node_compare.unwrap().entry);
     }
