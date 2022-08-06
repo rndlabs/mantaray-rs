@@ -542,12 +542,20 @@ impl MantarayNode {
             panic!("Fork mapping is not defined in the manifest");
         }
 
-        let fork = self.forks.get_mut(&path[0]);
-
-        match fork {
+        match self.forks.get_mut(&path[0]) {
+            None => panic!(
+                "Path has not been found in the manifest. Remaining path on lookup: {}",
+                String::from_utf8(path).unwrap()
+            ),
             Some(f) => {
-                let prefix_index = find_index_of_array(&path, &f.prefix);
-                match prefix_index {
+                match find_index_of_array(&path, &f.prefix) {
+                    None => {
+                        panic!(
+                            "Path has not been found in the manifest. Remaining path on lookup {} on prefix: {}", 
+                            String::from_utf8(path[..].to_vec()).unwrap(),
+                            String::from_utf8(f.prefix[..].to_vec()).unwrap()
+                        );
+                    },
                     Some(_) => {
                         let rest = &path[f.prefix.len()..];
                         if rest.is_empty() {
@@ -558,19 +566,8 @@ impl MantarayNode {
                             f.node.remove_path(rest.to_vec())
                         }
                     }
-                    None => {
-                        panic!(
-                            "Path has not been found in the manifest. Remaining path on lookup {} on prefix: {}", 
-                            String::from_utf8(path[..].to_vec()).unwrap(),
-                            String::from_utf8(f.prefix[..].to_vec()).unwrap()
-                        );
                     }
-                }
-            }
-            None => panic!(
-                "Path has not been found in the manifest. Remaining path on lookup: {}",
-                String::from_utf8(path).unwrap()
-            ),
+            },
         }
     }
 
