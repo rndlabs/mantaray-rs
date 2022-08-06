@@ -87,8 +87,8 @@ impl MantarayFork {
         prefix_output[..self.prefix.len()].copy_from_slice(&self.prefix);
 
         // if content address length is 32 or 64, add to output vector
-        if self.node.content_address.len() == 32 || self.node.content_address.len() == 64 {
-            output.extend_from_slice(&self.node.content_address);
+        if self.node.cac.len() == 32 || self.node.cac.len() == 64 {
+            output.extend_from_slice(&self.node.cac);
         } else {
             panic!("Cannot serialize MantarayFork because it does not have a content address");
         }
@@ -143,7 +143,7 @@ impl MantarayFork {
                     MantarayNode {
                         node_type,
                         obfuscation_key,
-                        content_address: [].to_vec(),
+                        cac: [].to_vec(),
                         entry: entry.to_vec(),
                         metadata: map,
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -161,7 +161,7 @@ impl MantarayFork {
                 MantarayNode {
                     node_type,
                     obfuscation_key,
-                    content_address: [].to_vec(),
+                    cac: [].to_vec(),
                     entry: entry.to_vec(),
                     metadata: HashMap::<String, String>::new(),
                     forks: HashMap::<u8, MantarayFork>::new(),
@@ -183,6 +183,7 @@ pub struct MantarayNode {
     #[serde_as(as = "serde_with::hex::Hex")]
     obfuscation_key: [u8; 32],
     #[serde_as(as = "serde_with::hex::Hex")]
+    cac: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     entry: Vec<u8>,
     metadata: HashMap<String, String>,
@@ -247,7 +248,7 @@ impl MantarayNode {
     }
 
     pub fn content_address(&self) -> &[u8] {
-        &self.content_address
+        &self.cac
     }
 
     pub fn entry(&self) -> &[u8] {
@@ -264,7 +265,7 @@ impl MantarayNode {
             panic!("Wrong reference length. Entry only can be 32 or 64 length in bytes");
         }
 
-        self.content_address = content_address.to_vec();
+        self.cac = content_address.to_vec();
     }
 
     pub fn set_entry(&mut self, entry: &[u8]) {
@@ -399,7 +400,7 @@ impl MantarayNode {
                     let mut node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: [].to_vec(),
+                        cac: [].to_vec(),
                         entry: ZERO_BYTES.to_vec(),
                         metadata: HashMap::<String, String>::new(),
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -420,7 +421,7 @@ impl MantarayNode {
                     let mut node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: [].to_vec(),
+                        cac: [].to_vec(),
                         entry: entry.to_vec(),
                         metadata,
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -449,7 +450,7 @@ impl MantarayNode {
                     new_node = MantarayNode {
                         node_type: 0,
                         obfuscation_key,
-                        content_address: [].to_vec(),
+                        cac: [].to_vec(),
                         entry: ZERO_BYTES.to_vec(),
                         metadata: HashMap::<String, String>::new(),
                         forks: HashMap::<u8, MantarayFork>::new(),
@@ -572,11 +573,11 @@ impl MantarayNode {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.content_address.is_empty()
+        self.cac.is_empty()
     }
 
     pub fn make_dirty(&mut self) {
-        self.content_address = [].to_vec()
+        self.cac = [].to_vec()
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
@@ -745,7 +746,7 @@ impl MantarayNode {
                     false => 0,
                 },
                 obfuscation_key: obfuscation_key.as_slice().try_into().unwrap(),
-                content_address: [].to_vec(),
+                cac: [].to_vec(),
                 entry: ZERO_BYTES.to_vec(),
                 metadata: HashMap::new(),
                 forks,
@@ -829,7 +830,7 @@ impl MantarayNode {
         if !self.is_dirty() && !changed {
             eprintln!("No changes detected");
             return Ok(RecursiveSaveReturnType {
-                reference: self.content_address.clone(),
+                reference: self.cac.clone(),
                 changed: false,
             });
         }
@@ -1015,7 +1016,7 @@ mod tests {
         let mut node = MantarayNode {
             node_type: 0,
             obfuscation_key: ZERO_BYTES,
-            content_address: [].to_vec(),
+            cac: [].to_vec(),
             entry: rand_address.as_slice().to_vec(),
             metadata: HashMap::new(),
             forks: HashMap::new(),
@@ -1067,7 +1068,7 @@ mod tests {
         let node = MantarayNode {
             node_type: 0,
             obfuscation_key: ZERO_BYTES,
-            content_address: [].to_vec(),
+            cac: [].to_vec(),
             entry: rand_address.as_slice().to_vec(),
             metadata: HashMap::new(),
             forks: HashMap::new(),
