@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use async_recursion::async_recursion;
 use serde::*;
+use serde_with::serde_as;
 
 #[derive(Debug, Deserialize, Clone, Default)]
 struct UploadedReference {
@@ -64,8 +65,10 @@ pub struct UploadOptions {
     pub tag: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MantarayFork {
+    #[serde_as(as = "serde_with::hex::Hex")]
     prefix: Vec<u8>,
     node: MantarayNode,
 }
@@ -173,11 +176,14 @@ impl MantarayFork {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MantarayNode {
     node_type: u8,
+    #[serde_as(as = "serde_with::hex::Hex")]
     obfuscation_key: [u8; 32],
-    content_address: Vec<u8>,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    #[serde_as(as = "serde_with::hex::Hex")]
     entry: Vec<u8>,
     metadata: HashMap<String, String>,
     forks: HashMap<u8, MantarayFork>,
@@ -919,12 +925,24 @@ mod tests_integration {
             tag: String::from("test"),
         };
 
+        // before save, there shouldn't be any content addresses
+        eprintln!(
+            "Before save: {}", 
+            serde_json::to_string_pretty(&node).unwrap()
+                .replace("\\", "")
+        );
+
         // save
         let original_reference = node.save(&options).await.unwrap().clone();
 
-        eprintln!("Original reference: {:?}", hex::encode(&original_reference));
+        // before save, there shouldn't be any content addresses
+        eprintln!(
+            "After save: {}", 
+            serde_json::to_string_pretty(&node).unwrap()
+                .replace("\\", "")
+        );
 
-        eprintln!("Node: {:?}", node);
+        eprintln!("Original reference: {}", hex::encode(&original_reference));
 
         // let get_check_node = || -> &MantarayNode {
         //     &node.get_fork_at_path("path1/valami/".as_bytes()).node
@@ -961,7 +979,11 @@ mod tests_integration {
 
         let deleted_reference = node.save(&options).await.unwrap();
 
-        eprintln!("Node: {:?}", node);
+        eprintln!(
+            "After deletion: {}", 
+            serde_json::to_string_pretty(&node).unwrap()
+                .replace("\\", "")
+        );
 
         eprintln!("Deleted reference: {:?}", hex::encode(&deleted_reference));
 
