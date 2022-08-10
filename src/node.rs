@@ -1,3 +1,6 @@
+
+use crate::Loader;
+use crate::persist::LoadSaver;
 use std::collections::HashMap;
 
 use serde::*;
@@ -135,10 +138,10 @@ impl Node {
     }
 
     // lookupnode finds the node for a path or returns error if not found.
-    fn lookup_node(&self, path: &[u8]) -> Result<&Node, String> {
-        // if forks hashmap is empty return error
+    pub fn lookup_node(&mut self, path: &[u8], l: &Option<LoadSaver>) -> Result<&Node, String> {
+        // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            return Err(format!("No forks found for node: {:?}", self.ref_));
+            self.load(l);
         }
 
         // if the path is empty return the current node
@@ -146,7 +149,7 @@ impl Node {
             return Ok(self);
         }
 
-        match self.forks.get(&path[0]) {
+        match self.forks.get_mut(&path[0]) {
             None => Err(format!("No fork found for node: {:?}", self.ref_)),
             Some(f) => {
                 // get the common prefix of the fork and the path
@@ -154,7 +157,7 @@ impl Node {
 
                 // if c is the same length as the fork prefix then recursive lookup node
                 if c.len() == f.prefix.len() {
-                    f.node.lookup_node(&path[c.len()..])
+                    f.node.lookup_node(&path[c.len()..], l)
                 } else {
                     Err(format!("No fork found for node: {:?}", self.ref_))
                 }
@@ -163,8 +166,8 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub fn lookup(&self, path: &[u8]) -> Result<&[u8], String> {
-        let node = self.lookup_node(path)?;
+    pub fn lookup(&mut self, path: &[u8], l: &Option<LoadSaver>) -> Result<&[u8], String> {
+        let node = self.lookup_node(path, l)?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
             return Err(format!("No entry found for node: {:?}", node.ref_));
@@ -179,6 +182,7 @@ impl Node {
         path: &[u8],
         entry: &[u8],
         metadata: HashMap<String, String>,
+        ls: &Option<LoadSaver>
     ) -> Result<(), String> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
@@ -188,14 +192,12 @@ impl Node {
             if !entry.is_empty() {
                 self.ref_bytes_size = entry.len() as u32;
             }
-        } else {
-            if !entry.is_empty() && entry.len() != self.ref_bytes_size as usize {
-                return Err(format!(
-                    "node entry size: {:?} expected: {:?}",
-                    entry.len(),
-                    self.ref_bytes_size
-                ));
-            }
+        } else if !entry.is_empty() && entry.len() != self.ref_bytes_size as usize {
+            return Err(format!(
+                "node entry size: {:?} expected: {:?}",
+                entry.len(),
+                self.ref_bytes_size
+            ));
         }
 
         // if path is empty then set entry and return
@@ -212,6 +214,11 @@ impl Node {
             // set self ref to empty vec
             self.ref_ = vec![];
             return Ok(());
+        }
+
+        // if forks hashmap is empty, perhaps we haven't loaded the forks yet
+        if self.forks.is_empty() {
+            self.load(ls)?;
         }
 
         // try get the fork at the first character of the path
@@ -234,7 +241,7 @@ impl Node {
                 let (prefix, rest) = path.split_at(NFS_PREFIX_MAX_SIZE);
 
                 // add rest to the new node
-                nn.add(rest, entry, metadata)?;
+                nn.add(rest, entry, metadata, ls)?;
                 nn.update_is_with_path_separator(prefix);
 
                 // add the new node to the forks hashmap
@@ -316,7 +323,7 @@ impl Node {
         nn.update_is_with_path_separator(path);
 
         // add new node for shared prefix
-        nn.add(&path[c.len()..], entry, metadata)?;
+        nn.add(&path[c.len()..], entry, metadata, ls)?;
 
         // add the new node to the forks hashmap
         self.forks.insert(
@@ -345,11 +352,17 @@ impl Node {
     }
 
     // remove removes a path from the node
-    pub fn remove(&mut self, path: &[u8]) -> Result<(), String> {
+    pub fn remove(&mut self, path: &[u8], ls: &Option<LoadSaver>) -> Result<(), String> {
         // if path is empty then return error
         if path.is_empty() {
             return Err("path is empty".to_string());
         }
+
+        // if forks is empty then load
+        if self.forks.is_empty() {
+            self.load(ls)?;
+        }
+
         // if path is not empty then get the fork at the first character of the path
         let f = self.forks.get_mut(&path[0]);
         if f.is_none() {
@@ -370,17 +383,23 @@ impl Node {
             return Ok(());
         }
 
-        f.unwrap().node.remove(rest)
+        f.unwrap().node.remove(rest, ls)
     }
 
     // hasprefix tests whether the node contains prefix path
-    pub fn has_prefix(&self, path: &[u8]) -> bool {
+    pub fn has_prefix(&mut self, path: &[u8], l: &Option<LoadSaver>) -> bool {
         // if path is empty then return false
         if path.is_empty() {
             return true;
         }
+
+        // if forks is empty then load
+        if self.forks.is_empty() {
+            self.load(l);
+        }
+
         // if path is not empty then get the fork at the first character of the path
-        let fork = self.forks.get(&path[0]);
+        let fork = self.forks.get_mut(&path[0]);
         if fork.is_none() {
             return false;
         }
@@ -390,7 +409,7 @@ impl Node {
 
         // if common prefix is full path then return true
         if c.len() == fork.as_ref().unwrap().prefix.len() {
-            return fork.unwrap().node.has_prefix(&path[c.len()..]);
+            return fork.unwrap().node.has_prefix(&path[c.len()..], l);
         }
 
         // determine if a fork prefix begins with the byte slice t.
@@ -405,185 +424,353 @@ impl Node {
 #[cfg(test)]
 mod tests {
 
+    // use crate::persist::MockLoadSaver;
+
     use super::*;
-    use rand::Rng;
+    use test_case::test_case;
 
-    pub fn get_sample_mantaray_node() -> Result<(Node, Vec<Vec<u8>>), String> {
-        let rand_address = rand::thread_rng().gen::<[u8; 32]>();
-
-        let mut node = Node {
-            node_type: 0,
-            obfuscation_key: [].to_vec(),
-            ref_: [].to_vec(),
-            entry: rand_address.as_slice().to_vec(),
-            metadata: HashMap::new(),
-            forks: HashMap::new(),
-            ref_bytes_size: Default::default(),
-        };
-
-        let path1 = "path1/valami/elso";
-        let path2 = "path1/valami/masodik";
-        let path3 = "path1/valami/masodik.ext";
-        let path4 = "path1/valami";
-        let path5 = "path2";
-
-        let mut path1_metadata = HashMap::<String, String>::new();
-        path1_metadata.insert("vmi".to_string(), "elso".to_string());
-        node.add(path1.as_bytes(), &rand_address, path1_metadata)?;
-        node.add(
-            path2.as_bytes(),
-            &rand_address,
-            HashMap::<String, String>::default(),
-        )?;
-        node.add(
-            path3.as_bytes(),
-            &rand_address,
-            HashMap::<String, String>::new(),
-        )?;
-        let mut path4_metadata = HashMap::<String, String>::new();
-        path4_metadata.insert("vmi".to_string(), "negy".to_string());
-        node.add(path4.as_bytes(), &rand_address, path4_metadata)?;
-        node.add(
-            path5.as_bytes(),
-            &rand_address,
-            HashMap::<String, String>::new(),
-        )?;
-
-        Ok((
-            node,
-            vec![
-                path1.as_bytes().to_vec(),
-                path2.as_bytes().to_vec(),
-                path3.as_bytes().to_vec(),
-                path4.as_bytes().to_vec(),
-                path5.as_bytes().to_vec(),
-            ],
-        ))
+    struct TestCase<'a> {
+        name: String,
+        items: Vec<&'a str>,
     }
+
+    // fn mock_loader_ok() -> dyn Loader {
+    //     Box::from(|_: &[u8]| {
+    //         Ok(vec![])
+    //     })
+    // }
 
     #[test]
-    fn node_structure_check() {
-        let (node, paths) = get_sample_mantaray_node().unwrap();
-
-        eprintln!(
-            "After save: {}",
-            serde_json::to_string_pretty(&node)
-                .unwrap()
-                .replace("\\", "")
-        );
-
-        assert_eq!(
-            node.forks.keys().cloned().collect::<Vec<u8>>(),
-            vec![paths[0][0]]
-        );
-        let second_level_fork = node.forks.get(&paths[4][0]).unwrap();
-        assert_eq!(second_level_fork.prefix, "path".as_bytes());
-        let second_level_node = &second_level_fork.node;
-        let mut second_level_node_keys =
-            second_level_node.forks.keys().cloned().collect::<Vec<u8>>();
-        second_level_node_keys.sort();
-        assert_eq!(second_level_node_keys, vec![paths[0][4], paths[4][4]]);
-        let third_level_fork_2 = second_level_node.forks.get(&paths[4][4]).unwrap();
-        assert_eq!(third_level_fork_2.prefix, vec![paths[4][4]]);
-        let third_level_fork_1 = second_level_node.forks.get(&paths[0][4]).unwrap();
-        assert_eq!(third_level_fork_1.prefix, Vec::from("1/valami".as_bytes()));
-        let third_level_node_1 = &third_level_fork_1.node;
-        let mut third_level_node_keys = third_level_node_1
-            .forks
-            .keys()
-            .cloned()
-            .collect::<Vec<u8>>();
-        third_level_node_keys.sort();
-        assert_eq!(third_level_node_keys, vec![paths[0][12]]);
-        let fourth_level_fork_1 = third_level_node_1.forks.get(&paths[0][12]).unwrap();
-        assert_eq!(fourth_level_fork_1.prefix, vec![paths[0][12]]);
-        let fourth_level_node_1 = &fourth_level_fork_1.node;
-        let mut fourth_level_node_keys = fourth_level_node_1
-            .forks
-            .keys()
-            .cloned()
-            .collect::<Vec<u8>>();
-        fourth_level_node_keys.sort();
-        assert_eq!(fourth_level_node_keys, vec![paths[0][13], paths[1][13]]);
-        let fifth_level_fork_2 = fourth_level_node_1.forks.get(&paths[1][13]).unwrap();
-        assert_eq!(fifth_level_fork_2.prefix, Vec::from("masodik".as_bytes()));
-        let fifth_level_node_2 = &fifth_level_fork_2.node;
-        let mut fifth_level_node_keys = fifth_level_node_2
-            .forks
-            .keys()
-            .cloned()
-            .collect::<Vec<u8>>();
-        fifth_level_node_keys.sort();
-        assert_eq!(fifth_level_node_keys, vec![paths[2][20]]);
-        let sixth_level_node_1 = fifth_level_node_2.forks.get(&paths[2][20]).unwrap();
-        assert_eq!(sixth_level_node_1.prefix, Vec::from(".ext".as_bytes()));
+    fn nil_path() {
+        let mut n = Node::default();
+        // assert_eq!(n.lookup("".as_bytes(), Some(&None)).is_ok(), true);
+        assert_eq!(n.lookup("".as_bytes(), &None).is_ok(), true);
     }
+
+    // test data
+    fn test_case_data() -> [TestCase<'static>; 6] {
+        [
+            TestCase {
+                name: "a".to_string(),
+                items: vec![
+                    "aaaaaa", 
+                    "aaaaab",
+                    "abbbb",
+                    "abbba",
+                    "bbbbba",
+                    "bbbaaa",
+                    "bbbaab",
+                    "aa",
+                    "b"
+                    ],
+            },
+            TestCase {
+                name: "simple".to_string(),
+                items: vec![
+                    "/",
+                    "index.html",
+                    "img/1.png",
+                    "img/2.png",
+                    "robots.txt"
+                    ],
+            },
+            TestCase {
+                name: "nested-value-node-is-recognized".to_string(),
+                items: vec![
+                    "..............................@",
+                    ".............................."
+                    ],
+            },
+            TestCase {
+                name: "nested-prefix-is-not-collapsed".to_string(),
+                items: vec![
+                    "index.html",
+                    "img/1.png",
+                    "img/2/test1.png",
+                    "img/2/test2.png",
+                    "robots.txt"
+                    ],
+            },
+            TestCase {
+                name: "conflicting-path".to_string(),
+                items: vec![
+                    "app.js.map",
+                    "app.js"
+                ],
+            },
+            TestCase {
+                name: "spa-website".to_string(),
+                items: vec![
+                    "css/",
+                    "css/app.css",
+                    "favicon.ico",
+                    "img/",
+                    "img/logo.png",
+                    "index.html",
+                    "js/",
+                    "js/chunk-vendors.js.map",
+                    "js/chunk-vendors.js",
+                    "js/app.js.map",
+                    "js/app.js"
+                ],
+            }    
+        ]
+    }
+
 
     #[test]
-    fn get_fork_at_path_panic() {
-        let (node, _) = get_sample_mantaray_node().unwrap();
-        assert_eq!(
-            node.lookup_node("path/not/exists".as_bytes()).is_err(),
-            true
-        );
+    fn add_and_lookup() {
+        let mut n = Node::default();
+        for (i, c) in test_case_data()[0].items.iter().enumerate() {
+            // create a vector from the string c zero padded to the left to 32 bytes
+            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+            assert_eq!(n.add(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
+
+            for j in 0..i {
+                let d = test_case_data()[0].items[j].as_bytes();
+                let m = n.lookup(d, &None); 
+                assert_eq!(m.is_ok(), true);
+                let de = vec![0; 32 - d.len()].iter().chain(d.iter()).cloned().collect::<Vec<u8>>();
+                assert_eq!(m.unwrap(), de);
+            }            
+        }
     }
 
-    #[test]
-    fn get_fork_at_path() {
-        let (node, paths) = get_sample_mantaray_node().unwrap();
+    #[test_case(test_case_data()[0].items.clone() ; "a")]
+    #[test_case(test_case_data()[1].items.clone() ; "simple")]
+    #[test_case(test_case_data()[2].items.clone() ; "nested-value-node-is-recognized")]
+    #[test_case(test_case_data()[3].items.clone() ; "nested-prefix-is-not-collapsed")]
+    #[test_case(test_case_data()[4].items.clone() ; "conflicting-path")]
+    #[test_case(test_case_data()[5].items.clone() ; "spa-website")]
+    fn add_and_lookup_node(tc: Vec<&str>) {
+        let mut n = Node::default();
 
-        // no separator in the descendants
-        let fork1 = node
-            .lookup_node(String::from("path1/valami/").as_bytes())
-            .unwrap();
-        assert_eq!(check_for_separator(&fork1), false);
+        for (i, c) in tc.iter().enumerate() {
+            // create a vector from the string c zero padded to the left to 32 bytes
+            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+            assert_eq!(n.add(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
 
-        // separator in the descendants
-        let fork2 = node.lookup_node(&paths[3]).unwrap();
-        assert_eq!(check_for_separator(&fork2), true);
-
-        // no separator in the descendants, no forks
-        let fork3 = node.lookup_node(&paths[4]);
-        assert_eq!(fork3.is_ok(), false);
+            for j in 0..i {
+                let d = tc[j];
+                let node = n.lookup_node(d.as_bytes(), &None).unwrap();
+                assert_eq!(node.is_value_type(), true);
+                let de = vec![0; 32 - d.len()].iter().chain(d.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+                assert_eq!(node.entry, de);
+            }            
+        }
     }
 
-    #[test]
-    fn remove_path_panic() {
-        let (mut node, _) = get_sample_mantaray_node().unwrap();
-        assert_eq!(node.remove("path/not/exists".as_bytes()).is_err(), true);
-    }
+    #[test_case(test_case_data()[0].items.clone() ; "a")]
+    #[test_case(test_case_data()[1].items.clone() ; "simple")]
+    #[test_case(test_case_data()[2].items.clone() ; "nested-value-node-is-recognized")]
+    #[test_case(test_case_data()[3].items.clone() ; "nested-prefix-is-not-collapsed")]
+    #[test_case(test_case_data()[4].items.clone() ; "conflicting-path")]
+    #[test_case(test_case_data()[5].items.clone() ; "spa-website")]
+    fn add_and_lookup_node_with_load_save(tc: Vec<&str>) {
+        let mut n = Node::default();
 
-    #[test]
-    fn remove_path() {
-        let (mut node, paths) = get_sample_mantaray_node().unwrap();
-        let check_node_1 = node
-            .lookup_node(&Vec::from("path1/valami/".as_bytes()))
-            .unwrap()
-            .clone();
-
-        // current forks of node
-        let mut check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
-        check_node_keys.sort();
-        assert_eq!(check_node_keys, vec![paths[0][13], paths[1][13]]);
-
-        node.remove(&paths[1][..]).unwrap();
-        let check_node_1 = node
-            .lookup_node(&Vec::from("path1/valami/".as_bytes()))
-            .unwrap()
-            .clone();
-        // 'm' key of prefix table disappeared
-        let check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
-
-        assert_eq!(check_node_keys, vec![paths[0][13]]);
-    }
-
-    fn check_for_separator(node: &Node) -> bool {
-        for fork in node.forks.values() {
-            if fork.prefix.iter().any(|&v| v == 47) || check_for_separator(&fork.node) {
-                return true;
-            }
+        for (i, c) in tc.iter().enumerate() {
+            // create a vector from the string c zero padded to the left to 32 bytes
+            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+            assert_eq!(n.add(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
         }
 
-        false
+        // let ls = MockLoadSaver::new();
+        // let ls: LoadSaver = {
+        //     todo!()
+        // };
+
+        // let save = n.save(Some(ls));
+        // assert_eq!(save.is_ok(), true);
+
+        // let mut n2 = Node::new_node_ref(&n.ref_);
+
+        // for (j, d) in tc.iter().enumerate() {
+        //     let node = n2.lookup_node(d.as_bytes(), Some(ls)).unwrap();
+        //     assert_eq!(node.is_value_type(), true);
+        //     let de = vec![0; 32 - d.len()].iter().chain(d.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+        //     assert_eq!(node.entry, de);
+        // }
+
     }
+
 }
+//     pub fn get_sample_mantaray_node() -> Result<(Node, Vec<Vec<u8>>), String> {
+//         let rand_address = rand::thread_rng().gen::<[u8; 32]>();
+
+//         let mut node = Node {
+//             node_type: 0,
+//             obfuscation_key: [].to_vec(),
+//             ref_: [].to_vec(),
+//             entry: rand_address.as_slice().to_vec(),
+//             metadata: HashMap::new(),
+//             forks: HashMap::new(),
+//             ref_bytes_size: Default::default(),
+//         };
+
+//         let path1 = "path1/valami/elso";
+//         let path2 = "path1/valami/masodik";
+//         let path3 = "path1/valami/masodik.ext";
+//         let path4 = "path1/valami";
+//         let path5 = "path2";
+
+//         let mut path1_metadata = HashMap::<String, String>::new();
+//         path1_metadata.insert("vmi".to_string(), "elso".to_string());
+//         node.add(path1.as_bytes(), &rand_address, path1_metadata)?;
+//         node.add(
+//             path2.as_bytes(),
+//             &rand_address,
+//             HashMap::<String, String>::default(),
+//         )?;
+//         node.add(
+//             path3.as_bytes(),
+//             &rand_address,
+//             HashMap::<String, String>::new(),
+//         )?;
+//         let mut path4_metadata = HashMap::<String, String>::new();
+//         path4_metadata.insert("vmi".to_string(), "negy".to_string());
+//         node.add(path4.as_bytes(), &rand_address, path4_metadata)?;
+//         node.add(
+//             path5.as_bytes(),
+//             &rand_address,
+//             HashMap::<String, String>::new(),
+//         )?;
+
+//         Ok((
+//             node,
+//             vec![
+//                 path1.as_bytes().to_vec(),
+//                 path2.as_bytes().to_vec(),
+//                 path3.as_bytes().to_vec(),
+//                 path4.as_bytes().to_vec(),
+//                 path5.as_bytes().to_vec(),
+//             ],
+//         ))
+//     }
+
+//     #[test]
+//     fn node_structure_check() {
+//         let (node, paths) = get_sample_mantaray_node().unwrap();
+
+//         eprintln!(
+//             "After save: {}",
+//             serde_json::to_string_pretty(&node)
+//                 .unwrap()
+//                 .replace("\\", "")
+//         );
+
+//         assert_eq!(
+//             node.forks.keys().cloned().collect::<Vec<u8>>(),
+//             vec![paths[0][0]]
+//         );
+//         let second_level_fork = node.forks.get(&paths[4][0]).unwrap();
+//         assert_eq!(second_level_fork.prefix, "path".as_bytes());
+//         let second_level_node = &second_level_fork.node;
+//         let mut second_level_node_keys =
+//             second_level_node.forks.keys().cloned().collect::<Vec<u8>>();
+//         second_level_node_keys.sort();
+//         assert_eq!(second_level_node_keys, vec![paths[0][4], paths[4][4]]);
+//         let third_level_fork_2 = second_level_node.forks.get(&paths[4][4]).unwrap();
+//         assert_eq!(third_level_fork_2.prefix, vec![paths[4][4]]);
+//         let third_level_fork_1 = second_level_node.forks.get(&paths[0][4]).unwrap();
+//         assert_eq!(third_level_fork_1.prefix, Vec::from("1/valami".as_bytes()));
+//         let third_level_node_1 = &third_level_fork_1.node;
+//         let mut third_level_node_keys = third_level_node_1
+//             .forks
+//             .keys()
+//             .cloned()
+//             .collect::<Vec<u8>>();
+//         third_level_node_keys.sort();
+//         assert_eq!(third_level_node_keys, vec![paths[0][12]]);
+//         let fourth_level_fork_1 = third_level_node_1.forks.get(&paths[0][12]).unwrap();
+//         assert_eq!(fourth_level_fork_1.prefix, vec![paths[0][12]]);
+//         let fourth_level_node_1 = &fourth_level_fork_1.node;
+//         let mut fourth_level_node_keys = fourth_level_node_1
+//             .forks
+//             .keys()
+//             .cloned()
+//             .collect::<Vec<u8>>();
+//         fourth_level_node_keys.sort();
+//         assert_eq!(fourth_level_node_keys, vec![paths[0][13], paths[1][13]]);
+//         let fifth_level_fork_2 = fourth_level_node_1.forks.get(&paths[1][13]).unwrap();
+//         assert_eq!(fifth_level_fork_2.prefix, Vec::from("masodik".as_bytes()));
+//         let fifth_level_node_2 = &fifth_level_fork_2.node;
+//         let mut fifth_level_node_keys = fifth_level_node_2
+//             .forks
+//             .keys()
+//             .cloned()
+//             .collect::<Vec<u8>>();
+//         fifth_level_node_keys.sort();
+//         assert_eq!(fifth_level_node_keys, vec![paths[2][20]]);
+//         let sixth_level_node_1 = fifth_level_node_2.forks.get(&paths[2][20]).unwrap();
+//         assert_eq!(sixth_level_node_1.prefix, Vec::from(".ext".as_bytes()));
+//     }
+
+//     #[test]
+//     fn get_fork_at_path_panic() {
+//         let (node, _) = get_sample_mantaray_node().unwrap();
+//         assert_eq!(
+//             node.lookup_node("path/not/exists".as_bytes()).is_err(),
+//             true
+//         );
+//     }
+
+//     #[test]
+//     fn get_fork_at_path() {
+//         let (node, paths) = get_sample_mantaray_node().unwrap();
+
+//         // no separator in the descendants
+//         let fork1 = node
+//             .lookup_node(String::from("path1/valami/").as_bytes())
+//             .unwrap();
+//         assert_eq!(check_for_separator(&fork1), false);
+
+//         // separator in the descendants
+//         let fork2 = node.lookup_node(&paths[3]).unwrap();
+//         assert_eq!(check_for_separator(&fork2), true);
+
+//         // no separator in the descendants, no forks
+//         let fork3 = node.lookup_node(&paths[4]);
+//         assert_eq!(fork3.is_ok(), false);
+//     }
+
+//     #[test]
+//     fn remove_path_panic() {
+//         let (mut node, _) = get_sample_mantaray_node().unwrap();
+//         assert_eq!(node.remove("path/not/exists".as_bytes()).is_err(), true);
+//     }
+
+//     #[test]
+//     fn remove_path() {
+//         let (mut node, paths) = get_sample_mantaray_node().unwrap();
+//         let check_node_1 = node
+//             .lookup_node(&Vec::from("path1/valami/".as_bytes()))
+//             .unwrap()
+//             .clone();
+
+//         // current forks of node
+//         let mut check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+//         check_node_keys.sort();
+//         assert_eq!(check_node_keys, vec![paths[0][13], paths[1][13]]);
+
+//         node.remove(&paths[1][..]).unwrap();
+//         let check_node_1 = node
+//             .lookup_node(&Vec::from("path1/valami/".as_bytes()))
+//             .unwrap()
+//             .clone();
+//         // 'm' key of prefix table disappeared
+//         let check_node_keys = check_node_1.forks.keys().cloned().collect::<Vec<u8>>();
+
+//         assert_eq!(check_node_keys, vec![paths[0][13]]);
+//     }
+
+//     fn check_for_separator(node: &Node) -> bool {
+//         for fork in node.forks.values() {
+//             if fork.prefix.iter().any(|&v| v == 47) || check_for_separator(&fork.node) {
+//                 return true;
+//             }
+//         }
+
+//         false
+//     }
+// }

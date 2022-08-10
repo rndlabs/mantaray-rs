@@ -302,12 +302,10 @@ impl Marshal for Fork {
             // calcuate the amount of padding to add
             let padding = if metadata_bytes_size_with_size < NHS_OBFUSCATION_KEY {
                 NHS_OBFUSCATION_KEY - metadata_bytes_size_with_size
+            } else if metadata_bytes_size_with_size > NHS_OBFUSCATION_KEY {
+                (NHS_OBFUSCATION_KEY - metadata_bytes_size_with_size) & NHS_OBFUSCATION_KEY
             } else {
-                if metadata_bytes_size_with_size > NHS_OBFUSCATION_KEY {
-                    NHS_OBFUSCATION_KEY - metadata_bytes_size_with_size & NHS_OBFUSCATION_KEY
-                } else {
-                    0
-                }
+                0
             };
 
             // add the padding to the metadata_json_bytes
