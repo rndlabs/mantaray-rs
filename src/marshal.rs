@@ -471,4 +471,102 @@ fn encrypt_decrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    use std::collections::HashMap;
+
+    use crate::keccak256;
+
+    use super::*;
+
+    const TEST_MARSHAL_OUTPUT_01: &str = "52fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64950ac787fbce1061870e8d34e0a638bc7e812c7ca4ebd31d626a572ba47b06f6952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072102654f163f5f0fa0621d729566c74d10037c4d7bbb0407d1e2c64950fcd3072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64950f89d6640e3044f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64850ff9f642182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64b50fc98072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64a50ff99622182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64d";
+    const TEST_MARSHAL_OUTPUT_02: &str = "52fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64905954fb18659339d0b25e0fb9723d3cd5d528fb3c8d495fd157bd7b7a210496952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072102654f163f5f0fa0621d729566c74d10037c4d7bbb0407d1e2c64940fcd3072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952e3872548ec012a6e123b60f9177017fb12e57732621d2c1ada267adbe8cc4350f89d6640e3044f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64850ff9f642182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64b50fc98072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64a50ff99622182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64952fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c64d";
+
+    #[derive(Clone, Default)]
+    struct MarshallNodeEntry {
+        path: String,
+        metadata: HashMap<String, String>,
+    }
+
+    fn test_entries() -> [MarshallNodeEntry; 5] {
+        [
+            MarshallNodeEntry {
+                path: "/".to_string(),
+                metadata: serde_json::from_str(
+                    r#"{
+                    "index-document": "aaaaa"
+                }"#,
+                )
+                .unwrap()
+            },
+            MarshallNodeEntry {
+                path: "aaaaa".to_string(),
+                ..Default::default()
+            },
+            MarshallNodeEntry {
+                path: "cc".to_string(),
+                ..Default::default()
+            },
+            MarshallNodeEntry {
+                path: "d".to_string(),
+                ..Default::default()
+            },
+            MarshallNodeEntry {
+                path: "ee".to_string(),
+                ..Default::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn version_hash_01() {
+        assert_eq!(keccak256(VERSION_STRING_01.as_bytes()).to_vec(), hex::decode(VERSION_HASH_01).unwrap());
+    }
+
+    #[test]
+    fn version_hash_02() {
+        assert_eq!(keccak256(VERSION_STRING_02.as_bytes()).to_vec(), hex::decode(VERSION_HASH_02).unwrap());
+    }
+
+    #[test]
+    fn unmarshall_01() {
+        let mut marshalled_data = hex::decode(TEST_MARSHAL_OUTPUT_01).unwrap();
+        let mut n = Node::default();
+
+        assert_eq!(n.unmarshal_binary(&mut marshalled_data).is_ok(), true);
+
+        let expect_encrypted_bytes = hex::decode(&TEST_MARSHAL_OUTPUT_01[128..192]).unwrap();
+        let expect_bytes = encrypt_decrypt(&expect_encrypted_bytes, &n.obfuscation_key);
+
+        assert_eq!(n.entry, expect_bytes);
+        assert_eq!(test_entries().len(), n.forks.len());
+
+        for entry in test_entries() {
+            assert_eq!(n.forks.contains_key(&entry.path.as_bytes()[0]), true);
+            assert_eq!(n.forks[&entry.path.as_bytes()[0]].prefix, entry.path.as_bytes());
+        }
+    }
+
+    #[test]
+    fn unmarshal_02() {
+        let mut marshalled_data = hex::decode(TEST_MARSHAL_OUTPUT_02).unwrap();
+        let mut n = Node::default();
+
+        assert_eq!(n.unmarshal_binary(&mut marshalled_data).is_ok(), true);
+        
+        let expect_encrypted_bytes = hex::decode(&TEST_MARSHAL_OUTPUT_02[128..192]).unwrap();
+        let expect_bytes = encrypt_decrypt(&expect_encrypted_bytes, &n.obfuscation_key);
+
+        assert_eq!(n.entry, expect_bytes);
+        assert_eq!(test_entries().len(), n.forks.len());
+
+        for entry in test_entries() {
+            assert_eq!(n.forks.contains_key(&entry.path.as_bytes()[0]), true);
+            assert_eq!(n.forks[&entry.path.as_bytes()[0]].prefix, entry.path.as_bytes());
+
+            if entry.metadata.len() > 0 {
+                assert_eq!(n.forks[&entry.path.as_bytes()[0]].node.metadata, entry.metadata);
+            }
+        }
+    }   
+}
