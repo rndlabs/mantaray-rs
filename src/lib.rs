@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use node::Node;
-use persist::{LoadSaver, Loader};
+use persist::LoaderSaver;
 use tiny_keccak::{Keccak, Hasher};
 
 pub mod marshal;
@@ -10,17 +10,21 @@ pub mod persist;
 
 const PATH_SEPARATOR: &str = "/";
 
-const NFS_NODE_TYPE: usize = 1;
-const NFS_PREFIX_LENGTH: usize = 1;
-const NFS_PRE_REFERENCE: usize = 32;
-const NFS_METADATA: usize = 2;
-const NFS_HEADER: usize = NFS_NODE_TYPE + NFS_PREFIX_LENGTH;
-const NFS_PREFIX_MAX_SIZE: usize = NFS_PRE_REFERENCE - NFS_HEADER;
+// node header field constraints
+const NODE_OBFUSCATION_KEY_SIZE: usize = 32;
+const VERSION_HASH_SIZE: usize = 31;
+const NODE_REF_BYTES_SIZE: usize = 1;
 
-const NHS_OBFUSCATION_KEY: usize = 32;
-const NHS_VERSION_HASH: usize = 31;
-const NHS_REF_BYTES: usize = 1;
-const NHS_FULL: usize = NHS_OBFUSCATION_KEY + NHS_VERSION_HASH + NHS_REF_BYTES;
+// NODE_HEADER_SIZE defines the total size of the header part
+const NODE_HEADER_SIZE: usize = NODE_OBFUSCATION_KEY_SIZE + VERSION_HASH_SIZE + NODE_REF_BYTES_SIZE;
+
+// node fork constraints
+const NODE_FORK_TYPE_BYTES_SIZE: usize = 1;
+const NODE_FORK_PREFIX_BYTES_SIZE: usize = 1;
+const NODE_FORK_HEADER_SIZE: usize = NODE_FORK_TYPE_BYTES_SIZE + NODE_FORK_PREFIX_BYTES_SIZE;
+const NODE_FORK_PRE_REFERENCE_SIZE: usize = 32;
+const NODE_PREFIX_MAX_SIZE: usize = NODE_FORK_PRE_REFERENCE_SIZE - NODE_FORK_HEADER_SIZE;
+const NODE_FORK_METADATA_BYTES_SIZE: usize = 2;
 
 const NT_VALUE: u8 = 2;
 const NT_EDGE: u8 = 4;
@@ -28,22 +32,14 @@ const NT_WITH_PATH_SEPARATOR: u8 = 8;
 const NT_WITH_METADATA: u8 = 16;
 const NT_MASK: u8 = 255;
 
-// trait Loader {
-//     fn load(&self, slice: &[u8]) -> Result<Vec<u8>, String>;
-// }
-
-// trait Saver {
-//     fn save(&self, slice: &[u8]) -> Result<Vec<u8>, String>;
-// }
-
-pub struct Manifest {
+pub struct Manifest<'a, T: LoaderSaver + ?Sized> {
     trie: Node,
-    ls: Option<LoadSaver>
+    ls: Option<&'a T>
 }
 
-impl Manifest {
+impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     // new manataray manifest creates a new mantaray-based manifest.
-    pub fn new(ls: Option<LoadSaver>, encrypted: bool) -> Manifest{
+    pub fn new(ls: Option<&T>, encrypted: bool) -> Manifest<T>{
         let mut mm = Manifest {
             ls,
             trie: Node::default(),
@@ -51,14 +47,14 @@ impl Manifest {
 
         // use emtpy obfuscation key if encryption is not enabled
         if !encrypted {
-            mm.trie.obfuscation_key = [0u8; NHS_OBFUSCATION_KEY].to_vec();
+            mm.trie.obfuscation_key = [0u8; NODE_OBFUSCATION_KEY_SIZE].to_vec();
         }
 
         mm
     }
 
     // new_manifest_reference loads existing mantaray-based manifest.
-    pub fn new_manifest_reference(reference: Reference, ls: Option<LoadSaver>) -> Result<Manifest, String> {
+    pub fn new_manifest_reference<'a>(reference: Reference<'a>, ls: Option<&'a T>) -> Result<Manifest<'a, T>, String> {
         let mm = Manifest {
             ls,
             trie: Node::new_node_ref(reference),
@@ -101,7 +97,7 @@ impl Manifest {
     }
 
     // determine if the manifest has a specified prefix.
-    pub fn has_prefix(&mut self, prefix: &str) -> bool {
+    pub fn has_prefix(&mut self, prefix: &str) -> Result<bool, String> {
         self.trie.has_prefix(prefix.as_bytes(), &self.ls)
     }
 
