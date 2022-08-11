@@ -13,10 +13,12 @@ const VERSION_CODE_01: &str = "0.1";
 const VERSION_CODE_02: &str = "0.2";
 const VERSION_SEPARATOR: &str = ":";
 // "mantaray:0.1"
+#[allow(dead_code)]
 const VERSION_STRING_01: &str = concatcp!(VERSION_NAME, VERSION_SEPARATOR, VERSION_CODE_01);
 // pre-calculated version string, Keccak-256
 const VERSION_HASH_01: &str = "025184789d63635766d78c41900196b57d7400875ebe4d9b5d1e76bd9652a9b7";
 // "mantaray:0.2"
+#[allow(dead_code)]
 const VERSION_STRING_02: &str = concatcp!(VERSION_NAME, VERSION_SEPARATOR, VERSION_CODE_02);
 // pre-calculated version string, Keccak-256
 const VERSION_HASH_02: &str = "5768b3b6a7db56d21d1abff40d41cebfc83448fed8d7e9b06ec0d3b073f28f7b";
