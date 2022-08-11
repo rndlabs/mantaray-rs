@@ -497,7 +497,7 @@ mod tests {
                     "index-document": "aaaaa"
                 }"#,
                 )
-                .unwrap()
+                .unwrap(),
             },
             MarshallNodeEntry {
                 path: "aaaaa".to_string(),
@@ -520,12 +520,18 @@ mod tests {
 
     #[test]
     fn version_hash_01() {
-        assert_eq!(keccak256(VERSION_STRING_01.as_bytes()).to_vec(), hex::decode(VERSION_HASH_01).unwrap());
+        assert_eq!(
+            keccak256(VERSION_STRING_01.as_bytes()).to_vec(),
+            hex::decode(VERSION_HASH_01).unwrap()
+        );
     }
 
     #[test]
     fn version_hash_02() {
-        assert_eq!(keccak256(VERSION_STRING_02.as_bytes()).to_vec(), hex::decode(VERSION_HASH_02).unwrap());
+        assert_eq!(
+            keccak256(VERSION_STRING_02.as_bytes()).to_vec(),
+            hex::decode(VERSION_HASH_02).unwrap()
+        );
     }
 
     #[test]
@@ -543,7 +549,10 @@ mod tests {
 
         for entry in test_entries() {
             assert_eq!(n.forks.contains_key(&entry.path.as_bytes()[0]), true);
-            assert_eq!(n.forks[&entry.path.as_bytes()[0]].prefix, entry.path.as_bytes());
+            assert_eq!(
+                n.forks[&entry.path.as_bytes()[0]].prefix,
+                entry.path.as_bytes()
+            );
         }
     }
 
@@ -553,7 +562,7 @@ mod tests {
         let mut n = Node::default();
 
         assert_eq!(n.unmarshal_binary(&mut marshalled_data).is_ok(), true);
-        
+
         let expect_encrypted_bytes = hex::decode(&TEST_MARSHAL_OUTPUT_02[128..192]).unwrap();
         let expect_bytes = encrypt_decrypt(&expect_encrypted_bytes, &n.obfuscation_key);
 
@@ -562,11 +571,17 @@ mod tests {
 
         for entry in test_entries() {
             assert_eq!(n.forks.contains_key(&entry.path.as_bytes()[0]), true);
-            assert_eq!(n.forks[&entry.path.as_bytes()[0]].prefix, entry.path.as_bytes());
+            assert_eq!(
+                n.forks[&entry.path.as_bytes()[0]].prefix,
+                entry.path.as_bytes()
+            );
 
             if entry.metadata.len() > 0 {
-                assert_eq!(n.forks[&entry.path.as_bytes()[0]].node.metadata, entry.metadata);
+                assert_eq!(
+                    n.forks[&entry.path.as_bytes()[0]].node.metadata,
+                    entry.metadata
+                );
             }
         }
-    }   
+    }
 }
