@@ -1,7 +1,7 @@
-use std::sync::Mutex;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
-use crate::{node::Node, marshal::Marshal, keccak256};
+use crate::{keccak256, marshal::Marshal, node::Node};
 
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 pub trait Loader {
@@ -19,15 +19,14 @@ pub trait LoaderSaver {
     fn as_dyn(&self) -> &dyn LoaderSaver;
 }
 
-
 impl Node {
     // a load function for nodes
-    pub fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), String>  {
+    pub fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), String> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
         }
-        
+
         // if l is not a loader, return no loader error
         if l.is_none() {
             return Err("No loader".to_string());
@@ -49,7 +48,10 @@ impl Node {
         self.save_recursive(s)
     }
 
-    pub fn save_recursive<T: LoaderSaver + ?Sized>(&mut self, s: &Option<&T>) -> Result<(), String> {
+    pub fn save_recursive<T: LoaderSaver + ?Sized>(
+        &mut self,
+        s: &Option<&T>,
+    ) -> Result<(), String> {
         // if ref_ is already a reference, return
         if !self.ref_.is_empty() {
             return Ok(());
@@ -76,7 +78,7 @@ impl Node {
 pub type Address = [u8; 32];
 
 #[derive(Debug, Default)]
-pub struct MockLoadSaver{
+pub struct MockLoadSaver {
     store: Mutex<HashMap<Address, Vec<u8>>>,
 }
 

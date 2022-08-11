@@ -1,12 +1,11 @@
-
-use crate::{persist::LoaderSaver};
+use crate::persist::LoaderSaver;
 use std::collections::HashMap;
 
 use serde::*;
 use serde_with::serde_as;
 
 use crate::{
-    NODE_PREFIX_MAX_SIZE, NODE_OBFUSCATION_KEY_SIZE, NT_EDGE, NT_MASK, NT_VALUE, NT_WITH_METADATA,
+    NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE, NT_EDGE, NT_MASK, NT_VALUE, NT_WITH_METADATA,
     NT_WITH_PATH_SEPARATOR, PATH_SEPARATOR,
 };
 
@@ -128,7 +127,11 @@ impl Node {
     }
 
     // lookupnode finds the node for a path or returns error if not found.
-    pub fn lookup_node<T: LoaderSaver + ?Sized>(&mut self, path: &[u8], l: &Option<&T>) -> Result<&Node, String> {
+    pub fn lookup_node<T: LoaderSaver + ?Sized>(
+        &mut self,
+        path: &[u8],
+        l: &Option<&T>,
+    ) -> Result<&Node, String> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
             self.load(l)?;
@@ -156,7 +159,11 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub fn lookup<T: LoaderSaver + ?Sized>(&mut self, path: &[u8], l: &Option<&T>) -> Result<&[u8], String> {
+    pub fn lookup<T: LoaderSaver + ?Sized>(
+        &mut self,
+        path: &[u8],
+        l: &Option<&T>,
+    ) -> Result<&[u8], String> {
         let node = self.lookup_node(path, l)?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
@@ -172,7 +179,7 @@ impl Node {
         path: &[u8],
         entry: &[u8],
         metadata: HashMap<String, String>,
-        ls: &Option<&T>
+        ls: &Option<&T>,
     ) -> Result<(), String> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
@@ -341,7 +348,11 @@ impl Node {
     }
 
     // remove removes a path from the node
-    pub fn remove<T: LoaderSaver + ?Sized>(&mut self, path: &[u8], ls: &Option<&T>) -> Result<(), String> {
+    pub fn remove<T: LoaderSaver + ?Sized>(
+        &mut self,
+        path: &[u8],
+        ls: &Option<&T>,
+    ) -> Result<(), String> {
         // if path is empty then return error
         if path.is_empty() {
             return Err("path is empty".to_string());
@@ -376,7 +387,11 @@ impl Node {
     }
 
     // hasprefix tests whether the node contains prefix path
-    pub fn has_prefix<T: LoaderSaver + ?Sized>(&mut self, path: &[u8], l: &Option<&T>) -> Result<bool, String> {
+    pub fn has_prefix<T: LoaderSaver + ?Sized>(
+        &mut self,
+        path: &[u8],
+        l: &Option<&T>,
+    ) -> Result<bool, String> {
         // if path is empty then return false
         if path.is_empty() {
             return Ok(true);
@@ -427,7 +442,10 @@ mod tests {
     #[test]
     fn nil_path() {
         let mut n = Node::default();
-        assert_eq!(n.lookup::<dyn LoaderSaver>("".as_bytes(), &None).is_ok(), true);
+        assert_eq!(
+            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None).is_ok(),
+            true
+        );
     }
 
     // test data
@@ -436,33 +454,19 @@ mod tests {
             TestCase {
                 name: "a".to_string(),
                 items: vec![
-                    "aaaaaa", 
-                    "aaaaab",
-                    "abbbb",
-                    "abbba",
-                    "bbbbba",
-                    "bbbaaa",
-                    "bbbaab",
-                    "aa",
-                    "b"
-                    ],
+                    "aaaaaa", "aaaaab", "abbbb", "abbba", "bbbbba", "bbbaaa", "bbbaab", "aa", "b",
+                ],
             },
             TestCase {
                 name: "simple".to_string(),
-                items: vec![
-                    "/",
-                    "index.html",
-                    "img/1.png",
-                    "img/2.png",
-                    "robots.txt"
-                    ],
+                items: vec!["/", "index.html", "img/1.png", "img/2.png", "robots.txt"],
             },
             TestCase {
                 name: "nested-value-node-is-recognized".to_string(),
                 items: vec![
                     "..............................@",
-                    ".............................."
-                    ],
+                    "..............................",
+                ],
             },
             TestCase {
                 name: "nested-prefix-is-not-collapsed".to_string(),
@@ -471,15 +475,12 @@ mod tests {
                     "img/1.png",
                     "img/2/test1.png",
                     "img/2/test2.png",
-                    "robots.txt"
-                    ],
+                    "robots.txt",
+                ],
             },
             TestCase {
                 name: "conflicting-path".to_string(),
-                items: vec![
-                    "app.js.map",
-                    "app.js"
-                ],
+                items: vec!["app.js.map", "app.js"],
             },
             TestCase {
                 name: "spa-website".to_string(),
@@ -494,28 +495,38 @@ mod tests {
                     "js/chunk-vendors.js.map",
                     "js/chunk-vendors.js",
                     "js/app.js.map",
-                    "js/app.js"
+                    "js/app.js",
                 ],
-            }    
+            },
         ]
     }
-
 
     #[test]
     fn add_and_lookup() {
         let mut n = Node::default();
         for (i, c) in test_case_data()[0].items.iter().enumerate() {
             // create a vector from the string c zero padded to the left to 32 bytes
-            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
-            assert_eq!(n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
+            let e = vec![0; 32 - c.len()]
+                .iter()
+                .chain(c.as_bytes().iter())
+                .cloned()
+                .collect::<Vec<u8>>();
+            assert_eq!(
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None),
+                Ok(())
+            );
 
             for j in 0..i {
                 let d = test_case_data()[0].items[j].as_bytes();
-                let m = n.lookup::<dyn LoaderSaver>(d, &None); 
+                let m = n.lookup::<dyn LoaderSaver>(d, &None);
                 assert_eq!(m.is_ok(), true);
-                let de = vec![0; 32 - d.len()].iter().chain(d.iter()).cloned().collect::<Vec<u8>>();
+                let de = vec![0; 32 - d.len()]
+                    .iter()
+                    .chain(d.iter())
+                    .cloned()
+                    .collect::<Vec<u8>>();
                 assert_eq!(m.unwrap(), de);
-            }            
+            }
         }
     }
 
@@ -530,16 +541,29 @@ mod tests {
 
         for (i, c) in tc.iter().enumerate() {
             // create a vector from the string c zero padded to the left to 32 bytes
-            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
-            assert_eq!(n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
+            let e = vec![0; 32 - c.len()]
+                .iter()
+                .chain(c.as_bytes().iter())
+                .cloned()
+                .collect::<Vec<u8>>();
+            assert_eq!(
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None),
+                Ok(())
+            );
 
             for j in 0..i {
                 let d = tc[j];
-                let node = n.lookup_node::<dyn LoaderSaver>(d.as_bytes(), &None).unwrap();
+                let node = n
+                    .lookup_node::<dyn LoaderSaver>(d.as_bytes(), &None)
+                    .unwrap();
                 assert_eq!(node.is_value_type(), true);
-                let de = vec![0; 32 - d.len()].iter().chain(d.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+                let de = vec![0; 32 - d.len()]
+                    .iter()
+                    .chain(d.as_bytes().iter())
+                    .cloned()
+                    .collect::<Vec<u8>>();
                 assert_eq!(node.entry, de);
-            }            
+            }
         }
     }
 
@@ -554,8 +578,15 @@ mod tests {
 
         for c in &tc {
             // create a vector from the string c zero padded to the left to 32 bytes
-            let e = vec![0; 32 - c.len()].iter().chain(c.as_bytes().iter()).cloned().collect::<Vec<u8>>();
-            assert_eq!(n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None), Ok(()));
+            let e = vec![0; 32 - c.len()]
+                .iter()
+                .chain(c.as_bytes().iter())
+                .cloned()
+                .collect::<Vec<u8>>();
+            assert_eq!(
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None),
+                Ok(())
+            );
         }
 
         let ls = MockLoadSaver::new();
@@ -568,10 +599,13 @@ mod tests {
         for d in tc {
             let node = n2.lookup_node(d.as_bytes(), &Some(&ls)).unwrap();
             assert_eq!(node.is_value_type(), true);
-            let de = vec![0; 32 - d.len()].iter().chain(d.as_bytes().iter()).cloned().collect::<Vec<u8>>();
+            let de = vec![0; 32 - d.len()]
+                .iter()
+                .chain(d.as_bytes().iter())
+                .cloned()
+                .collect::<Vec<u8>>();
             assert_eq!(node.entry, de);
         }
-
     }
 
     pub fn get_sample_mantaray_node() -> Result<(Node, Vec<Vec<u8>>), String> {
@@ -602,13 +636,13 @@ mod tests {
             path2.as_bytes(),
             &rand_address,
             HashMap::<String, String>::default(),
-            &Some(&ls)
+            &Some(&ls),
         )?;
         node.add(
             path3.as_bytes(),
             &rand_address,
             HashMap::<String, String>::new(),
-            &Some(&ls)
+            &Some(&ls),
         )?;
         let mut path4_metadata = HashMap::<String, String>::new();
         path4_metadata.insert("vmi".to_string(), "negy".to_string());
@@ -617,7 +651,7 @@ mod tests {
             path5.as_bytes(),
             &rand_address,
             HashMap::<String, String>::new(),
-            &Some(&ls)
+            &Some(&ls),
         )?;
 
         Ok((
@@ -631,9 +665,7 @@ mod tests {
             ],
         ))
     }
-
 }
-
 
 //     #[test]
 //     fn node_structure_check() {

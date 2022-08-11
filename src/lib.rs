@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use node::Node;
 use persist::LoaderSaver;
-use tiny_keccak::{Keccak, Hasher};
+use tiny_keccak::{Hasher, Keccak};
 
 pub mod marshal;
 pub mod node;
@@ -34,12 +34,12 @@ const NT_MASK: u8 = 255;
 
 pub struct Manifest<'a, T: LoaderSaver + ?Sized> {
     trie: Node,
-    ls: Option<&'a T>
+    ls: Option<&'a T>,
 }
 
 impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     // new manataray manifest creates a new mantaray-based manifest.
-    pub fn new(ls: Option<&T>, encrypted: bool) -> Manifest<T>{
+    pub fn new(ls: Option<&T>, encrypted: bool) -> Manifest<T> {
         let mut mm = Manifest {
             ls,
             trie: Node::default(),
@@ -54,7 +54,10 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     }
 
     // new_manifest_reference loads existing mantaray-based manifest.
-    pub fn new_manifest_reference<'a>(reference: Reference<'a>, ls: Option<&'a T>) -> Result<Manifest<'a, T>, String> {
+    pub fn new_manifest_reference<'a>(
+        reference: Reference<'a>,
+        ls: Option<&'a T>,
+    ) -> Result<Manifest<'a, T>, String> {
         let mm = Manifest {
             ls,
             trie: Node::new_node_ref(reference),
@@ -66,10 +69,10 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     // add a path and entry to the manifest.
     pub fn add(&mut self, path: &str, entry: &Entry) -> Result<(), String> {
         self.trie.add(
-            path.as_bytes(), 
-            entry.reference, 
+            path.as_bytes(),
+            entry.reference,
             entry.metadata.clone(),
-            &self.ls
+            &self.ls,
         )
     }
 
@@ -89,7 +92,7 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
 
         // copy the metadata from the node.
         let metadata = n.metadata.clone();
-        
+
         Ok(Entry {
             reference: &n.ref_,
             metadata,
@@ -102,7 +105,6 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     }
 
     // todo!{"Finish manifest implementation"}
-
 }
 
 // define a trait that represents a single manifest entry.

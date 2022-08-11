@@ -3,8 +3,9 @@ use rand::RngCore;
 
 use crate::{
     node::{Fork, Node},
-    NODE_FORK_METADATA_BYTES_SIZE, NODE_PREFIX_MAX_SIZE, NODE_HEADER_SIZE,
-    NODE_OBFUSCATION_KEY_SIZE, VERSION_HASH_SIZE, NT_WITH_METADATA, NODE_FORK_PRE_REFERENCE_SIZE, NODE_FORK_HEADER_SIZE, NODE_FORK_TYPE_BYTES_SIZE,
+    NODE_FORK_HEADER_SIZE, NODE_FORK_METADATA_BYTES_SIZE, NODE_FORK_PRE_REFERENCE_SIZE,
+    NODE_FORK_TYPE_BYTES_SIZE, NODE_HEADER_SIZE, NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE,
+    NT_WITH_METADATA, VERSION_HASH_SIZE,
 };
 
 const VERSION_NAME: &str = "mantaray";
@@ -63,7 +64,8 @@ impl Marshal for Node {
             .copy_from_slice(&hex::decode(&VERSION_HASH_02).unwrap()[..VERSION_HASH_SIZE]);
 
         // set the ref_bytes_size in the header
-        header[NODE_OBFUSCATION_KEY_SIZE + VERSION_HASH_SIZE] = self.ref_bytes_size.try_into().unwrap();
+        header[NODE_OBFUSCATION_KEY_SIZE + VERSION_HASH_SIZE] =
+            self.ref_bytes_size.try_into().unwrap();
 
         // define an empty vector to store the marshaled data
         let mut data = header;
@@ -94,13 +96,7 @@ impl Marshal for Node {
         let mut forks = self.forks.keys().collect::<Vec<&u8>>();
         forks.sort();
         for fork in forks {
-            data.extend_from_slice(
-                &self
-                    .forks
-                    .get(fork)
-                    .unwrap()
-                    .marshal_binary()?,
-            );
+            data.extend_from_slice(&self.forks.get(fork).unwrap().marshal_binary()?);
         }
 
         // get the slice of the data vector offset by the obfuscation key length until the end of the vector
@@ -140,7 +136,8 @@ impl Marshal for Node {
             let ref_bytes_size = data[NODE_HEADER_SIZE - 1];
 
             // get the node entry from the data vector and copy it to the node
-            self.entry = data[NODE_HEADER_SIZE..NODE_HEADER_SIZE + ref_bytes_size as usize].to_vec();
+            self.entry =
+                data[NODE_HEADER_SIZE..NODE_HEADER_SIZE + ref_bytes_size as usize].to_vec();
 
             let mut offset = NODE_HEADER_SIZE + ref_bytes_size as usize;
 
@@ -152,7 +149,8 @@ impl Marshal for Node {
                 if index.get(b) {
                     let mut f = Fork::default();
 
-                    if data.len() < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize {
+                    if data.len() < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize
+                    {
                         return Err(format!(
                             "Not enough bytes for node fork: {} ({}) on byte '{:x}' (v1)",
                             data.len() - offset,
@@ -162,8 +160,9 @@ impl Marshal for Node {
                     }
 
                     // get the data to be unmarshaled from the data vector
-                    let mut to_unmarshal =
-                        data[offset..offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize].to_vec();
+                    let mut to_unmarshal = data
+                        [offset..offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize]
+                        .to_vec();
                     f.unmarshal_binary(to_unmarshal.as_mut_slice())?;
 
                     self.forks.insert(b, f);
@@ -180,7 +179,8 @@ impl Marshal for Node {
             let ref_bytes_size = data[NODE_HEADER_SIZE - 1];
 
             // get the node entry from the data vector and copy it to the node
-            self.entry = data[NODE_HEADER_SIZE..NODE_HEADER_SIZE + ref_bytes_size as usize].to_vec();
+            self.entry =
+                data[NODE_HEADER_SIZE..NODE_HEADER_SIZE + ref_bytes_size as usize].to_vec();
             let mut offset = NODE_HEADER_SIZE + ref_bytes_size as usize; // skip entry
 
             // Currently we don't persist the root nodeType when we marshal the manifest, as a result
@@ -218,7 +218,10 @@ impl Marshal for Node {
                     // if the node type is with metadata, then we need to unmarshal the metadata
                     if (node_type & NT_WITH_METADATA) == NT_WITH_METADATA {
                         if data.len()
-                            < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize + NODE_FORK_METADATA_BYTES_SIZE
+                            < offset
+                                + NODE_FORK_PRE_REFERENCE_SIZE
+                                + ref_bytes_size as usize
+                                + NODE_FORK_METADATA_BYTES_SIZE
                         {
                             return Err(format!(
                                 "Not enough bytes for node fork: {} ({}) on byte '{:x} (v2 with metadata)'",
@@ -230,7 +233,8 @@ impl Marshal for Node {
 
                         // get the metadata bytes size from the data vector from bigendian u16 format
                         let metadata_bytes_size = u16::from_be_bytes(
-                            data[offset + node_fork_size..offset + node_fork_size + NODE_FORK_METADATA_BYTES_SIZE]
+                            data[offset + node_fork_size
+                                ..offset + node_fork_size + NODE_FORK_METADATA_BYTES_SIZE]
                                 .try_into()
                                 .unwrap(),
                         );
@@ -246,7 +250,9 @@ impl Marshal for Node {
                             metadata_bytes_size.into(),
                         )?
                     } else {
-                        if data.len() < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize {
+                        if data.len()
+                            < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize
+                        {
                             return Err(format!(
                                 "Not enough bytes for node fork: {} ({}) on byte '{:x}'",
                                 data.len() - offset,
@@ -303,11 +309,17 @@ impl Marshal for Fork {
             // using json encoding to marshal the metadata
             let mut metadata_json_bytes = serde_json::to_string(&self.node.metadata).unwrap();
             // get the metadata size in bytes
-            let metadata_bytes_size_with_size = metadata_json_bytes.len() + NODE_FORK_METADATA_BYTES_SIZE;
+            let metadata_bytes_size_with_size =
+                metadata_json_bytes.len() + NODE_FORK_METADATA_BYTES_SIZE;
 
             let padding = match metadata_bytes_size_with_size {
-                x if x < NODE_OBFUSCATION_KEY_SIZE => NODE_OBFUSCATION_KEY_SIZE - metadata_bytes_size_with_size,
-                x if x > NODE_OBFUSCATION_KEY_SIZE => (NODE_OBFUSCATION_KEY_SIZE - metadata_bytes_size_with_size) % NODE_OBFUSCATION_KEY_SIZE,
+                x if x < NODE_OBFUSCATION_KEY_SIZE => {
+                    NODE_OBFUSCATION_KEY_SIZE - metadata_bytes_size_with_size
+                }
+                x if x > NODE_OBFUSCATION_KEY_SIZE => {
+                    (NODE_OBFUSCATION_KEY_SIZE - metadata_bytes_size_with_size)
+                        % NODE_OBFUSCATION_KEY_SIZE
+                }
                 _ => 0,
             };
 
@@ -346,11 +358,15 @@ impl Marshal for Fork {
 
         // if prefix length is invalid, return error
         if prefix_length as usize == 0 || prefix_length as usize > NODE_PREFIX_MAX_SIZE {
-            return Err(format!("Invalid prefix length (fork V1): {}", prefix_length));
+            return Err(format!(
+                "Invalid prefix length (fork V1): {}",
+                prefix_length
+            ));
         }
 
         // set fork prefix
-        self.prefix = (data[NODE_FORK_HEADER_SIZE..NODE_FORK_HEADER_SIZE + prefix_length as usize]).to_vec();
+        self.prefix =
+            (data[NODE_FORK_HEADER_SIZE..NODE_FORK_HEADER_SIZE + prefix_length as usize]).to_vec();
 
         // set node from new node reference
         self.node = Node::new_node_ref(&data[NODE_FORK_PRE_REFERENCE_SIZE..]);
@@ -376,18 +392,24 @@ impl MarshalV2 for Fork {
 
         // if prefix length is invalid, return error
         if prefix_length as usize == 0 || prefix_length as usize > NODE_PREFIX_MAX_SIZE {
-            return Err(format!("Invalid prefix length (fork V2): {}", prefix_length));
+            return Err(format!(
+                "Invalid prefix length (fork V2): {}",
+                prefix_length
+            ));
         }
 
         // set fork prefix
-        self.prefix = (data[NODE_FORK_HEADER_SIZE..NODE_FORK_HEADER_SIZE + prefix_length as usize]).to_vec();
-        self.node =
-            Node::new_node_ref(&data[NODE_FORK_PRE_REFERENCE_SIZE..NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size]);
+        self.prefix =
+            (data[NODE_FORK_HEADER_SIZE..NODE_FORK_HEADER_SIZE + prefix_length as usize]).to_vec();
+        self.node = Node::new_node_ref(
+            &data[NODE_FORK_PRE_REFERENCE_SIZE..NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size],
+        );
         self.node.node_type = node_type;
 
         // if there is metadata, unmarshal it
         if metadata_bytes_size > 0 {
-            let metadata_bytes = &data[NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size + NODE_FORK_METADATA_BYTES_SIZE..];
+            let metadata_bytes = &data
+                [NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size + NODE_FORK_METADATA_BYTES_SIZE..];
             let metadata = serde_json::from_slice(metadata_bytes).unwrap();
             self.node.metadata = metadata;
         }
@@ -446,9 +468,5 @@ fn encrypt_decrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
     output
 }
 
-
 #[cfg(test)]
-mod tests {
-
-
-}
+mod tests {}
