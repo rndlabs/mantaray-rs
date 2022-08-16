@@ -96,7 +96,7 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
 
         // if the node is not a value type, return not found.
         if !n.is_value_type() {
-            return Err(Box::new(NotValueTypeError{}));
+            return Err(Box::new(NotValueTypeError {}));
         }
 
         // copy the metadata from the node.

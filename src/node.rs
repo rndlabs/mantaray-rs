@@ -64,11 +64,7 @@ struct NodeEntryTooLargeError {
 }
 impl fmt::Display for NodeEntryTooLargeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Node entry too large: {} > {}",
-            self.size, self.max_size
-        )
+        write!(f, "Node entry too large: {} > {}", self.size, self.max_size)
     }
 }
 impl Error for NodeEntryTooLargeError {}
@@ -220,7 +216,9 @@ impl Node {
         }
 
         match self.forks.get_mut(&path[0]) {
-            None => Err(Box::new(NoForkForNodeError{cac: self.ref_.to_vec()})),
+            None => Err(Box::new(NoForkForNodeError {
+                cac: self.ref_.to_vec(),
+            })),
             Some(f) => {
                 // get the common prefix of the fork and the path
                 let c = common(&f.prefix, path);
@@ -229,7 +227,9 @@ impl Node {
                 if c.len() == f.prefix.len() {
                     f.node.lookup_node(&path[c.len()..], l)
                 } else {
-                    Err(Box::new(NoForkForNodeError{cac: self.ref_.to_vec()}))
+                    Err(Box::new(NoForkForNodeError {
+                        cac: self.ref_.to_vec(),
+                    }))
                 }
             }
         }
@@ -244,7 +244,9 @@ impl Node {
         let node = self.lookup_node(path, l)?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
-            return Err(Box::new(NoEntryForNodeError{cac: node.ref_.to_vec()}));
+            return Err(Box::new(NoEntryForNodeError {
+                cac: node.ref_.to_vec(),
+            }));
         }
 
         Ok(node.entry.as_slice())
@@ -260,14 +262,20 @@ impl Node {
     ) -> Result<(), Box<dyn Error>> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
-                return Err(Box::new(NodeEntryTooLargeError{ size: entry.len(), max_size: 256 }));
+                return Err(Box::new(NodeEntryTooLargeError {
+                    size: entry.len(),
+                    max_size: 256,
+                }));
             }
             // empty entry for directories
             if !entry.is_empty() {
                 self.ref_bytes_size = entry.len() as u32;
             }
         } else if !entry.is_empty() && entry.len() != self.ref_bytes_size as usize {
-            return Err(Box::new(NodeEntrySizeMismatchError{ size: entry.len(), expected_size: self.ref_bytes_size as usize }));
+            return Err(Box::new(NodeEntrySizeMismatchError {
+                size: entry.len(),
+                expected_size: self.ref_bytes_size as usize,
+            }));
         }
 
         // if path is empty then set entry and return
@@ -428,7 +436,7 @@ impl Node {
     ) -> Result<(), Box<dyn Error>> {
         // if path is empty then return error
         if path.is_empty() {
-            return Err(Box::new(EmptyPathError{}));
+            return Err(Box::new(EmptyPathError {}));
         }
 
         // if forks is empty then load
@@ -439,13 +447,17 @@ impl Node {
         // if path is not empty then get the fork at the first character of the path
         let f = self.forks.get_mut(&path[0]);
         if f.is_none() {
-            return Err(Box::new(PathPrefixNotFoundError{path: vec![path[0]]}));
+            return Err(Box::new(PathPrefixNotFoundError {
+                path: vec![path[0]],
+            }));
         }
 
         // returns the index of the first instance of sep in s, or -1 if sep is not present in s.
         let prefix_index = find_index_of_array(path, &f.as_ref().unwrap().prefix);
         if prefix_index.is_none() {
-            return Err(Box::new(PathPrefixNotFoundError{path: path.to_vec()}));
+            return Err(Box::new(PathPrefixNotFoundError {
+                path: path.to_vec(),
+            }));
         }
 
         let rest = &path[f.as_ref().unwrap().prefix.len()..];
@@ -693,7 +705,8 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None).unwrap(),
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .unwrap(),
                 ()
             );
 
@@ -728,7 +741,8 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None).unwrap(),
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .unwrap(),
                 ()
             );
 
@@ -765,7 +779,8 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None).unwrap(),
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .unwrap(),
                 ()
             );
         }
@@ -801,7 +816,8 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.path.as_bytes(), &e, c.metadata.clone(), &None).unwrap(),
+                n.add::<dyn LoaderSaver>(c.path.as_bytes(), &e, c.metadata.clone(), &None)
+                    .unwrap(),
                 ()
             );
 
@@ -820,7 +836,10 @@ mod tests {
 
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
-            assert_eq!(n.remove::<dyn LoaderSaver>(c.as_bytes(), &None).unwrap(), ());
+            assert_eq!(
+                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None).unwrap(),
+                ()
+            );
 
             let lookup = n.lookup::<dyn LoaderSaver>(c.as_bytes(), &None);
             assert_eq!(lookup.is_err(), true);
@@ -840,7 +859,8 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, Default::default(), &None).unwrap(),
+                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, Default::default(), &None)
+                    .unwrap(),
                 ()
             );
         }

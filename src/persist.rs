@@ -1,7 +1,7 @@
-use std::fmt;
-use std::{collections::HashMap, error::Error};
-use std::sync::Mutex;
 use reqwest::blocking;
+use std::fmt;
+use std::sync::Mutex;
+use std::{collections::HashMap, error::Error};
 
 use crate::{keccak256, marshal::Marshal, node::Node};
 
@@ -147,10 +147,10 @@ impl LoaderSaver for BeeLoadSaver {
 
         // bubble up if there is an error
         if !res.status().is_success() {
-            return Err(Box::new(res.error_for_status().unwrap_err()));
+            Err(Box::new(res.error_for_status().unwrap_err()))
         } else {
             let data = res.bytes()?;
-            return Ok(data.to_vec());
+            Ok(data.to_vec())
         }
     }
 
