@@ -122,7 +122,7 @@ impl LoaderSaver for MockLoadSaver {
 
 pub struct BeeLoadSaver {
     uri: String,
-    client: reqwest::Client,
+    client: blocking::Client,
     stamp: Option<Vec<u8>>,
 }
 
@@ -130,13 +130,13 @@ impl BeeLoadSaver {
     pub fn new(uri: String, stamp: Option<Vec<u8>>) -> BeeLoadSaver {
         BeeLoadSaver {
             uri,
-            client: reqwest::Client::new(),
+            client: blocking::Client::new(),
             stamp,
         }
     }
 }
 
-impl LoadSaver for BeeLoadSaver {
+impl LoaderSaver for BeeLoadSaver {
     fn as_dyn(&self) -> &dyn LoaderSaver {
         self
     }
@@ -155,10 +155,10 @@ impl LoadSaver for BeeLoadSaver {
     }
 
     fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-        not_implemented!();
-        let url = format!("{}/bytes", self.uri);
-        let res = self.client.post(&url).body(data).send()?;
-        let data: String = res.json::<serde_json::Value>()?;
-        Ok(data.to_vec())
+        todo!();
+        // let url = format!("{}/bytes", self.uri);
+        // let res = self.client.post(&url).body(data).send()?;
+        // let data: String = res.json::<serde_json::Value>()?;
+        // Ok(data.to_vec())
     }
 }
