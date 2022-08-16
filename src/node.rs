@@ -1,6 +1,7 @@
 use crate::persist::LoaderSaver;
 use std::{collections::HashMap, error::Error, fmt};
 
+use async_recursion::async_recursion;
 use serde::*;
 use serde_with::serde_as;
 
@@ -200,14 +201,15 @@ impl Node {
     }
 
     // lookupnode finds the node for a path or returns error if not found.
-    pub fn lookup_node<T: LoaderSaver + ?Sized>(
+    #[async_recursion]
+    pub async fn lookup_node<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         path: &[u8],
         l: &Option<&T>,
-    ) -> Result<&Node, Box<dyn Error>> {
+    ) -> Result<&mut Node, Box<dyn Error>> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(l)?;
+            self.load(l).await?;
         }
 
         // if the path is empty return the current node
@@ -218,14 +220,14 @@ impl Node {
         match self.forks.get_mut(&path[0]) {
             None => Err(Box::new(NoForkForNodeError {
                 cac: self.ref_.to_vec(),
-            })),
+            }) as Box<dyn Error>),
             Some(f) => {
                 // get the common prefix of the fork and the path
                 let c = common(&f.prefix, path);
 
                 // if c is the same length as the fork prefix then recursive lookup node
                 if c.len() == f.prefix.len() {
-                    f.node.lookup_node(&path[c.len()..], l)
+                    f.node.lookup_node(&path[c.len()..], l).await
                 } else {
                     Err(Box::new(NoForkForNodeError {
                         cac: self.ref_.to_vec(),
@@ -236,12 +238,12 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub fn lookup<T: LoaderSaver + ?Sized>(
+    pub async fn lookup<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         path: &[u8],
         l: &Option<&T>,
     ) -> Result<&[u8], Box<dyn Error>> {
-        let node = self.lookup_node(path, l)?;
+        let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
             return Err(Box::new(NoEntryForNodeError {
@@ -253,7 +255,8 @@ impl Node {
     }
 
     // Add adds an entry to the path with metadata
-    pub fn add<T: LoaderSaver + ?Sized>(
+    #[async_recursion]
+    pub async fn add<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         path: &[u8],
         entry: &[u8],
@@ -265,7 +268,7 @@ impl Node {
                 return Err(Box::new(NodeEntryTooLargeError {
                     size: entry.len(),
                     max_size: 256,
-                }));
+                }) as Box<dyn Error>);
             }
             // empty entry for directories
             if !entry.is_empty() {
@@ -275,7 +278,7 @@ impl Node {
             return Err(Box::new(NodeEntrySizeMismatchError {
                 size: entry.len(),
                 expected_size: self.ref_bytes_size as usize,
-            }));
+            }) as Box<dyn Error>);
         }
 
         // if path is empty then set entry and return
@@ -296,7 +299,7 @@ impl Node {
 
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(ls)?;
+            self.load(ls).await?;
         }
 
         // try get the fork at the first character of the path
@@ -318,7 +321,7 @@ impl Node {
                 let (prefix, rest) = path.split_at(NODE_PREFIX_MAX_SIZE);
 
                 // add rest to the new node
-                nn.add(rest, entry, metadata, ls)?;
+                nn.add(rest, entry, metadata, ls).await?;
                 nn.update_is_with_path_separator(prefix);
 
                 // add the new node to the forks hashmap
@@ -400,7 +403,7 @@ impl Node {
         nn.update_is_with_path_separator(path);
 
         // add new node for shared prefix
-        nn.add(&path[c.len()..], entry, metadata, ls)?;
+        nn.add(&path[c.len()..], entry, metadata, ls).await?;
 
         // add the new node to the forks hashmap
         self.forks.insert(
@@ -429,19 +432,20 @@ impl Node {
     }
 
     // remove removes a path from the node
-    pub fn remove<T: LoaderSaver + ?Sized>(
+    #[async_recursion]
+    pub async fn remove<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         path: &[u8],
         ls: &Option<&T>,
     ) -> Result<(), Box<dyn Error>> {
         // if path is empty then return error
         if path.is_empty() {
-            return Err(Box::new(EmptyPathError {}));
+            return Err(Box::new(EmptyPathError {}) as Box<dyn Error>);
         }
 
         // if forks is empty then load
         if self.forks.is_empty() {
-            self.load(ls)?;
+            self.load(ls).await?;
         }
 
         // if path is not empty then get the fork at the first character of the path
@@ -449,7 +453,7 @@ impl Node {
         if f.is_none() {
             return Err(Box::new(PathPrefixNotFoundError {
                 path: vec![path[0]],
-            }));
+            }) as Box<dyn Error>);
         }
 
         // returns the index of the first instance of sep in s, or -1 if sep is not present in s.
@@ -468,11 +472,12 @@ impl Node {
             return Ok(());
         }
 
-        f.unwrap().node.remove(rest, ls)
+        f.unwrap().node.remove(rest, ls).await
     }
 
     // hasprefix tests whether the node contains prefix path
-    pub fn has_prefix<T: LoaderSaver + ?Sized>(
+    #[async_recursion]
+    pub async fn has_prefix<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         path: &[u8],
         l: &Option<&T>,
@@ -484,7 +489,7 @@ impl Node {
 
         // if forks is empty then load
         if self.forks.is_empty() {
-            self.load(l)?;
+            self.load(l).await?;
         }
 
         // if path is not empty then get the fork at the first character of the path
@@ -498,7 +503,7 @@ impl Node {
 
         // if common prefix is full path then return true
         if c.len() == fork.as_ref().unwrap().prefix.len() {
-            return fork.unwrap().node.has_prefix(&path[c.len()..], l);
+            return fork.unwrap().node.has_prefix(&path[c.len()..], l).await;
         }
 
         // determine if a fork prefix begins with the byte slice t.
@@ -544,11 +549,11 @@ mod tests {
         remove: Vec<String>,
     }
 
-    #[test]
-    fn nil_path() {
+    #[tokio::test]
+    async fn nil_path() {
         let mut n = Node::default();
         assert_eq!(
-            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None).is_ok(),
+            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None).await.is_ok(),
             true
         );
     }
@@ -694,8 +699,8 @@ mod tests {
         ]
     }
 
-    #[test]
-    fn add_and_lookup() {
+    #[tokio::test]
+    async fn add_and_lookup() {
         let mut n = Node::default();
         for (i, c) in test_case_data()[0].items.iter().enumerate() {
             // create a vector from the string c zero padded to the left to 32 bytes
@@ -706,6 +711,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             assert_eq!(
                 n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .await
                     .unwrap(),
                 ()
             );
@@ -713,13 +719,14 @@ mod tests {
             for j in 0..i {
                 let d = test_case_data()[0].items[j].as_bytes();
                 let m = n.lookup::<dyn LoaderSaver>(d, &None);
-                assert_eq!(m.is_ok(), true);
+                let r = m.await;
+                assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
                     .chain(d.iter())
                     .cloned()
                     .collect::<Vec<u8>>();
-                assert_eq!(m.unwrap(), de);
+                assert_eq!(r.unwrap(), de);
             }
         }
     }
@@ -730,7 +737,8 @@ mod tests {
     #[test_case(test_case_data()[3].items.clone() ; "nested-prefix-is-not-collapsed")]
     #[test_case(test_case_data()[4].items.clone() ; "conflicting-path")]
     #[test_case(test_case_data()[5].items.clone() ; "spa-website")]
-    fn add_and_lookup_node(tc: Vec<&str>) {
+    #[tokio::test]
+    async fn add_and_lookup_node(tc: Vec<&str>) {
         let mut n = Node::default();
 
         for (i, c) in tc.iter().enumerate() {
@@ -742,6 +750,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             assert_eq!(
                 n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .await
                     .unwrap(),
                 ()
             );
@@ -750,6 +759,7 @@ mod tests {
                 let d = tc[j];
                 let node = n
                     .lookup_node::<dyn LoaderSaver>(d.as_bytes(), &None)
+                    .await
                     .unwrap();
                 assert_eq!(node.is_value_type(), true);
                 let de = vec![0; 32 - d.len()]
@@ -768,7 +778,8 @@ mod tests {
     #[test_case(test_case_data()[3].items.clone() ; "nested-prefix-is-not-collapsed")]
     #[test_case(test_case_data()[4].items.clone() ; "conflicting-path")]
     #[test_case(test_case_data()[5].items.clone() ; "spa-website")]
-    fn add_and_lookup_node_with_load_save(tc: Vec<&str>) {
+    #[tokio::test]
+    async fn add_and_lookup_node_with_load_save(tc: Vec<&str>) {
         let mut n = Node::default();
 
         for c in &tc {
@@ -780,6 +791,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             assert_eq!(
                 n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                    .await
                     .unwrap(),
                 ()
             );
@@ -787,13 +799,15 @@ mod tests {
 
         let ls = MockLoadSaver::new();
 
-        let save = n.save(&Some(&ls));
+        let save = n.save(&Some(&ls)).await;
         assert_eq!(save.is_ok(), true);
 
         let mut n2 = Node::new_node_ref(&n.ref_);
 
         for d in tc {
-            let node = n2.lookup_node(d.as_bytes(), &Some(&ls)).unwrap();
+            let node = n2.lookup_node(d.as_bytes(), &Some(&ls))
+                .await
+                .unwrap();
             assert_eq!(node.is_value_type(), true);
             let de = vec![0; 32 - d.len()]
                 .iter()
@@ -806,7 +820,8 @@ mod tests {
 
     #[test_case(remove_test_case_data()[0].clone() ; "simple")]
     #[test_case(remove_test_case_data()[1].clone() ; "nested-prefix-is-not-collapsed")]
-    fn test_remove(tc: RemoveTestCase) {
+    #[tokio::test]
+    async fn test_remove(tc: RemoveTestCase) {
         let mut n = Node::default();
         for (i, c) in tc.items.iter().enumerate() {
             // create a vector from the string c zero padded to the left to 32 bytes
@@ -817,6 +832,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             assert_eq!(
                 n.add::<dyn LoaderSaver>(c.path.as_bytes(), &e, c.metadata.clone(), &None)
+                    .await
                     .unwrap(),
                 ()
             );
@@ -824,31 +840,33 @@ mod tests {
             for j in 0..i {
                 let d = &tc.items[j].path;
                 let m = n.lookup::<dyn LoaderSaver>(d.as_bytes(), &None);
-                assert_eq!(m.is_ok(), true);
+                let r = m.await;
+                assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
                     .chain(d.as_bytes().iter())
                     .cloned()
                     .collect::<Vec<u8>>();
-                assert_eq!(m.unwrap(), de);
+                assert_eq!(r.unwrap(), de);
             }
         }
 
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
             assert_eq!(
-                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None).unwrap(),
+                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None).await.unwrap(),
                 ()
             );
 
             let lookup = n.lookup::<dyn LoaderSaver>(c.as_bytes(), &None);
-            assert_eq!(lookup.is_err(), true);
+            assert_eq!(lookup.await.is_err(), true);
         }
     }
 
     #[test_case(has_prefix_test_case_data()[0].clone() ; "simple")]
     #[test_case(has_prefix_test_case_data()[1].clone() ; "nested-single")]
-    fn test_has_prefix(tc: HasPrefixTestCase) {
+    #[tokio::test]
+    async fn test_has_prefix(tc: HasPrefixTestCase) {
         let mut n = Node::default();
 
         for c in tc.paths.iter() {
@@ -860,6 +878,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             assert_eq!(
                 n.add::<dyn LoaderSaver>(c.as_bytes(), &e, Default::default(), &None)
+                    .await
                     .unwrap(),
                 ()
             );
@@ -867,7 +886,7 @@ mod tests {
 
         for (i, test_prefix) in tc.test_paths.iter().enumerate() {
             let has_prefix = n.has_prefix::<dyn LoaderSaver>(test_prefix.as_bytes(), &None);
-            assert_eq!(has_prefix.unwrap(), tc.should_exist[i]);
+            assert_eq!(has_prefix.await.unwrap(), tc.should_exist[i]);
         }
     }
 }

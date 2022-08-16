@@ -1,3 +1,5 @@
+use async_recursion::async_recursion;
+use async_trait::async_trait;
 use reqwest::blocking;
 use std::fmt;
 use std::sync::Mutex;
@@ -15,24 +17,28 @@ impl fmt::Display for NoLoaderError {
 impl Error for NoLoaderError {}
 
 // loader defines a trait that retrieves nodes by reference from a storage backend.
+#[async_trait]
 pub trait Loader {
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
 }
 
 // saver defines a trait that stores nodes by reference to a storage backend.
+
+#[async_trait]
 pub trait Saver {
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
 }
 
-pub trait LoaderSaver {
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
-    fn as_dyn(&self) -> &dyn LoaderSaver;
+#[async_trait]
+pub trait LoaderSaver: Sync {
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn as_dyn(&self) -> &dyn LoaderSaver;
 }
 
 impl Node {
     // a load function for nodes
-    pub fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), Box<dyn Error>> {
+    pub async fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), Box<dyn Error>> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -45,7 +51,7 @@ impl Node {
 
         // load the node from the storage backend
         let ref_ = self.ref_.clone();
-        let mut data = l.as_ref().unwrap().load(&ref_)?;
+        let mut data = l.unwrap().load(&ref_).await?;
 
         // unmarshall the node from dta into self
         self.unmarshal_binary(&mut data)?;
@@ -55,11 +61,12 @@ impl Node {
     }
 
     // save persists a trie recursively traversing the nodes
-    pub fn save<T: LoaderSaver + ?Sized>(&mut self, s: &Option<&T>) -> Result<(), Box<dyn Error>> {
-        self.save_recursive(s)
+    pub async fn save<T: LoaderSaver + ?Sized + std::marker::Sync>(&mut self, s: &Option<&T>) -> Result<(), Box<dyn Error>> {
+        self.save_recursive(s).await
     }
 
-    pub fn save_recursive<T: LoaderSaver + ?Sized>(
+    #[async_recursion]
+    pub async fn save_recursive<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         s: &Option<&T>,
     ) -> Result<(), Box<dyn Error>> {
@@ -71,14 +78,14 @@ impl Node {
         // recurse through the fork values of the node and save them
         // TODO! This is the area in which we can optimize the saving process.
         for fork in self.forks.values_mut() {
-            fork.node.save_recursive(s)?;
+            fork.node.save_recursive(s).await?;
         }
 
         // marshal the node to a slice of bytes
         let slice = self.marshal_binary()?;
 
         // save the node to the storage backend
-        self.ref_ = s.as_ref().unwrap().save(&slice)?;
+        self.ref_ = s.as_ref().unwrap().save(&slice).await?;
 
         self.forks.clear();
 
@@ -101,18 +108,20 @@ impl MockLoadSaver {
     }
 }
 
+#[async_trait]
 impl LoaderSaver for MockLoadSaver {
-    fn as_dyn(&self) -> &dyn LoaderSaver {
+
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
         self
     }
 
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let store = self.store.lock().unwrap();
         let data = store.get(ref_).unwrap();
         Ok(data.clone())
     }
 
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut store = self.store.lock().unwrap();
         let ref_ = keccak256(data);
         store.insert(ref_, data.to_vec());
@@ -136,12 +145,13 @@ impl BeeLoadSaver {
     }
 }
 
+#[async_trait]
 impl LoaderSaver for BeeLoadSaver {
-    fn as_dyn(&self) -> &dyn LoaderSaver {
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
         self
     }
 
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let url = format!("{}/bytes/{}", self.uri, hex::encode(ref_));
         let res = self.client.get(&url).send()?;
 
@@ -154,7 +164,7 @@ impl LoaderSaver for BeeLoadSaver {
         }
     }
 
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         todo!();
         // let url = format!("{}/bytes", self.uri);
         // let res = self.client.post(&url).body(data).send()?;
