@@ -5,17 +5,17 @@ use crate::{keccak256, marshal::Marshal, node::Node};
 
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 pub trait Loader {
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, String>;
+    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
 }
 
 // saver defines a trait that stores nodes by reference to a storage backend.
 pub trait Saver {
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, String>;
+    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
 }
 
 pub trait LoaderSaver {
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, String>;
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, String>;
+    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
     fn as_dyn(&self) -> &dyn LoaderSaver;
 }
 
@@ -95,16 +95,59 @@ impl LoaderSaver for MockLoadSaver {
         self
     }
 
-    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, String> {
+    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let store = self.store.lock().unwrap();
         let data = store.get(ref_).unwrap();
         Ok(data.clone())
     }
 
-    fn save(&self, data: &[u8]) -> Result<Vec<u8>, String> {
+    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut store = self.store.lock().unwrap();
         let ref_ = keccak256(data);
         store.insert(ref_, data.to_vec());
         Ok(ref_.to_vec())
+    }
+}
+
+pub struct BeeLoadSaver {
+    uri: String,
+    client: reqwest::Client,
+    stamp: Option<Vec<u8>>,
+}
+
+impl BeeLoadSaver {
+    pub fn new(uri: String, stamp: Option<Vec<u8>>) -> BeeLoadSaver {
+        BeeLoadSaver {
+            uri,
+            client: reqwest::Client::new(),
+            stamp,
+        }
+    }
+}
+
+impl LoadSaver for BeeLoadSaver {
+    fn as_dyn(&self) -> &dyn LoaderSaver {
+        self
+    }
+
+    fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        let url = format!("{}/bytes/{}", self.uri, hex::encode(ref_));
+        let res = self.client.get(&url).send()?;
+
+        // bubble up if there is an error
+        if !res.status().is_success() {
+            return Err(Box::new(res.error_for_status().unwrap_err()));
+        } else {
+            let data = res.bytes()?;
+            return Ok(data.to_vec());
+        }
+    }
+
+    fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        not_implemented!();
+        let url = format!("{}/bytes", self.uri);
+        let res = self.client.post(&url).body(data).send()?;
+        let data: String = res.json::<serde_json::Value>()?;
+        Ok(data.to_vec())
     }
 }
