@@ -553,7 +553,9 @@ mod tests {
     async fn nil_path() {
         let mut n = Node::default();
         assert_eq!(
-            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None).await.is_ok(),
+            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None)
+                .await
+                .is_ok(),
             true
         );
     }
@@ -805,9 +807,7 @@ mod tests {
         let mut n2 = Node::new_node_ref(&n.ref_);
 
         for d in tc {
-            let node = n2.lookup_node(d.as_bytes(), &Some(&ls))
-                .await
-                .unwrap();
+            let node = n2.lookup_node(d.as_bytes(), &Some(&ls)).await.unwrap();
             assert_eq!(node.is_value_type(), true);
             let de = vec![0; 32 - d.len()]
                 .iter()
@@ -854,7 +854,9 @@ mod tests {
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
             assert_eq!(
-                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None).await.unwrap(),
+                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None)
+                    .await
+                    .unwrap(),
                 ()
             );
 

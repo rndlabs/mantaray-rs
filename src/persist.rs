@@ -38,7 +38,10 @@ pub trait LoaderSaver: Sync {
 
 impl Node {
     // a load function for nodes
-    pub async fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), Box<dyn Error>> {
+    pub async fn load<T: LoaderSaver + ?Sized>(
+        &mut self,
+        l: &Option<&T>,
+    ) -> Result<(), Box<dyn Error>> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -61,7 +64,10 @@ impl Node {
     }
 
     // save persists a trie recursively traversing the nodes
-    pub async fn save<T: LoaderSaver + ?Sized + std::marker::Sync>(&mut self, s: &Option<&T>) -> Result<(), Box<dyn Error>> {
+    pub async fn save<T: LoaderSaver + ?Sized + std::marker::Sync>(
+        &mut self,
+        s: &Option<&T>,
+    ) -> Result<(), Box<dyn Error>> {
         self.save_recursive(s).await
     }
 
@@ -110,7 +116,6 @@ impl MockLoadSaver {
 
 #[async_trait]
 impl LoaderSaver for MockLoadSaver {
-
     async fn as_dyn(&self) -> &dyn LoaderSaver {
         self
     }

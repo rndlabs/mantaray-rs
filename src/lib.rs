@@ -77,12 +77,14 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
 
     // add a path and entry to the manifest.
     pub async fn add(&mut self, path: &str, entry: &Entry<'_>) -> Result<(), Box<dyn Error>> {
-        self.trie.add(
-            path.as_bytes(),
-            entry.reference,
-            entry.metadata.clone(),
-            &self.ls,
-        ).await
+        self.trie
+            .add(
+                path.as_bytes(),
+                entry.reference,
+                entry.metadata.clone(),
+                &self.ls,
+            )
+            .await
     }
 
     // remove a path from the manifest.
