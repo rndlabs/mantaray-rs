@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use node::Node;
 use persist::LoaderSaver;
@@ -31,6 +31,15 @@ const NT_EDGE: u8 = 4;
 const NT_WITH_PATH_SEPARATOR: u8 = 8;
 const NT_WITH_METADATA: u8 = 16;
 const NT_MASK: u8 = 255;
+
+#[derive(Debug, Clone)]
+struct NotValueTypeError;
+impl std::fmt::Display for NotValueTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Not a value type")
+    }
+}
+impl Error for NotValueTypeError {}
 
 pub struct Manifest<'a, T: LoaderSaver + ?Sized> {
     trie: Node,
@@ -67,7 +76,7 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     }
 
     // add a path and entry to the manifest.
-    pub fn add(&mut self, path: &str, entry: &Entry) -> Result<(), String> {
+    pub fn add(&mut self, path: &str, entry: &Entry) -> Result<(), Box<dyn Error>> {
         self.trie.add(
             path.as_bytes(),
             entry.reference,
@@ -77,17 +86,17 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     }
 
     // remove a path from the manifest.
-    pub fn remove(&mut self, path: &str) -> Result<(), String> {
+    pub fn remove(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
         self.trie.remove(path.as_bytes(), &self.ls)
     }
 
     // lookup a path in the manifest.
-    pub fn lookup(&mut self, path: &str) -> Result<Entry, String> {
+    pub fn lookup(&mut self, path: &str) -> Result<Entry, Box<dyn Error>> {
         let n = self.trie.lookup_node(path.as_bytes(), &self.ls)?;
 
         // if the node is not a value type, return not found.
         if !n.is_value_type() {
-            return Err("not a value type".to_string());
+            return Err(Box::new(NotValueTypeError{}));
         }
 
         // copy the metadata from the node.
@@ -100,7 +109,7 @@ impl<T: LoaderSaver + ?Sized> Manifest<'_, T> {
     }
 
     // determine if the manifest has a specified prefix.
-    pub fn has_prefix(&mut self, prefix: &str) -> Result<bool, String> {
+    pub fn has_prefix(&mut self, prefix: &str) -> Result<bool, Box<dyn Error>> {
         self.trie.has_prefix(prefix.as_bytes(), &self.ls)
     }
 

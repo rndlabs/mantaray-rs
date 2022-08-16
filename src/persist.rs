@@ -1,7 +1,18 @@
-use std::collections::HashMap;
+use std::fmt;
+use std::{collections::HashMap, error::Error};
 use std::sync::Mutex;
+use reqwest::blocking;
 
 use crate::{keccak256, marshal::Marshal, node::Node};
+
+#[derive(Debug, Clone)]
+struct NoLoaderError;
+impl fmt::Display for NoLoaderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "No loader provided")
+    }
+}
+impl Error for NoLoaderError {}
 
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 pub trait Loader {
@@ -21,7 +32,7 @@ pub trait LoaderSaver {
 
 impl Node {
     // a load function for nodes
-    pub fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), String> {
+    pub fn load<T: LoaderSaver + ?Sized>(&mut self, l: &Option<&T>) -> Result<(), Box<dyn Error>> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -29,7 +40,7 @@ impl Node {
 
         // if l is not a loader, return no loader error
         if l.is_none() {
-            return Err("No loader".to_string());
+            return Err(Box::new(NoLoaderError));
         }
 
         // load the node from the storage backend
@@ -44,14 +55,14 @@ impl Node {
     }
 
     // save persists a trie recursively traversing the nodes
-    pub fn save<T: LoaderSaver + ?Sized>(&mut self, s: &Option<&T>) -> Result<(), String> {
+    pub fn save<T: LoaderSaver + ?Sized>(&mut self, s: &Option<&T>) -> Result<(), Box<dyn Error>> {
         self.save_recursive(s)
     }
 
     pub fn save_recursive<T: LoaderSaver + ?Sized>(
         &mut self,
         s: &Option<&T>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Box<dyn Error>> {
         // if ref_ is already a reference, return
         if !self.ref_.is_empty() {
             return Ok(());
