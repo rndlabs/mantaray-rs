@@ -120,8 +120,8 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
 
 // define a trait that represents a single manifest entry.
 pub struct Entry<'a> {
-    reference: Reference<'a>,
-    metadata: HashMap<String, String>,
+    pub reference: Reference<'a>,
+    pub metadata: HashMap<String, String>,
 }
 
 type Reference<'a> = &'a [u8];
