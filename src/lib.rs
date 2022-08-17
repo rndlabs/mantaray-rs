@@ -42,7 +42,7 @@ impl std::fmt::Display for NotValueTypeError {
 impl Error for NotValueTypeError {}
 
 pub struct Manifest<'a, T: LoaderSaver + ?Sized + std::marker::Sync> {
-    trie: Node,
+    pub trie: Node,
     ls: Option<&'a T>,
 }
 
