@@ -18,6 +18,7 @@ futures = "0.3.21"
 async-recursion = "1.0.0"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 async-trait = "0.1.57"
+bee_api = { path = "../bee_api" }
 
 [dev-dependencies]
 test-case = "2.2.1"

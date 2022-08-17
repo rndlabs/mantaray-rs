@@ -1,6 +1,6 @@
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use reqwest::blocking;
+use bee_api::BeeConfig;
 use std::fmt;
 use std::sync::Mutex;
 use std::{collections::HashMap, error::Error};
@@ -136,16 +136,16 @@ impl LoaderSaver for MockLoadSaver {
 
 pub struct BeeLoadSaver {
     uri: String,
-    client: blocking::Client,
-    stamp: Option<Vec<u8>>,
+    config: BeeConfig,
+    client: reqwest::Client,
 }
 
 impl BeeLoadSaver {
-    pub fn new(uri: String, stamp: Option<Vec<u8>>) -> BeeLoadSaver {
+    pub fn new(uri: String, config: BeeConfig) -> BeeLoadSaver {
         BeeLoadSaver {
             uri,
-            client: blocking::Client::new(),
-            stamp,
+            config,
+            client: reqwest::Client::new(),
         }
     }
 }
@@ -157,23 +157,23 @@ impl LoaderSaver for BeeLoadSaver {
     }
 
     async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-        let url = format!("{}/bytes/{}", self.uri, hex::encode(ref_));
-        let res = self.client.get(&url).send()?;
-
-        // bubble up if there is an error
-        if !res.status().is_success() {
-            Err(Box::new(res.error_for_status().unwrap_err()))
-        } else {
-            let data = res.bytes()?;
-            Ok(data.to_vec())
-        }
+        Ok(
+            bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
+                .await?
+                .0,
+        )
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-        todo!();
-        // let url = format!("{}/bytes", self.uri);
-        // let res = self.client.post(&url).body(data).send()?;
-        // let data: String = res.json::<serde_json::Value>()?;
-        // Ok(data.to_vec())
+        Ok(hex::decode(bee_api::bytes_post(
+            self.client.clone(),
+            self.uri.clone(),
+            data.to_vec(),
+            self.config
+                .upload
+                .as_ref()
+                .expect("UploadConfig not specified"),
+        )
+        .await?.ref_)?)
     }
 }
