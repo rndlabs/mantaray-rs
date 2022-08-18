@@ -1,11 +1,13 @@
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use bee_api::BeeConfig;
-use std::fmt;
+use std::{fmt, error};
 use std::sync::Mutex;
 use std::{collections::HashMap, error::Error};
 
 use crate::{keccak256, marshal::Marshal, node::Node};
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
 #[derive(Debug, Clone)]
 struct NoLoaderError;
@@ -19,20 +21,20 @@ impl Error for NoLoaderError {}
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 #[async_trait]
 pub trait Loader {
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
 }
 
 // saver defines a trait that stores nodes by reference to a storage backend.
 
 #[async_trait]
 pub trait Saver {
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
 }
 
 #[async_trait]
 pub trait LoaderSaver: Sync {
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
     async fn as_dyn(&self) -> &dyn LoaderSaver;
 }
 
@@ -41,7 +43,7 @@ impl Node {
     pub async fn load<T: LoaderSaver + ?Sized>(
         &mut self,
         l: &Option<&T>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -67,7 +69,7 @@ impl Node {
     pub async fn save<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         s: &Option<&T>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         self.save_recursive(s).await
     }
 
@@ -75,7 +77,7 @@ impl Node {
     pub async fn save_recursive<T: LoaderSaver + ?Sized + std::marker::Sync>(
         &mut self,
         s: &Option<&T>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         // if ref_ is already a reference, return
         if !self.ref_.is_empty() {
             return Ok(());
@@ -120,13 +122,13 @@ impl LoaderSaver for MockLoadSaver {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
         let store = self.store.lock().unwrap();
         let data = store.get(ref_).unwrap();
         Ok(data.clone())
     }
 
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
         let mut store = self.store.lock().unwrap();
         let ref_ = keccak256(data);
         store.insert(ref_, data.to_vec());
@@ -156,7 +158,7 @@ impl LoaderSaver for BeeLoadSaver {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
         Ok(
             bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
                 .await?
@@ -164,8 +166,8 @@ impl LoaderSaver for BeeLoadSaver {
         )
     }
 
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-        Ok(hex::decode(bee_api::bytes_post(
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+        match hex::decode(bee_api::bytes_post(
             self.client.clone(),
             self.uri.clone(),
             data.to_vec(),
@@ -174,6 +176,9 @@ impl LoaderSaver for BeeLoadSaver {
                 .as_ref()
                 .expect("UploadConfig not specified"),
         )
-        .await?.ref_)?)
+        .await?.ref_) {
+            Ok(ref_) => Ok(ref_),
+            Err(e) => Err(Box::new(e)),
+        }
     }
 }

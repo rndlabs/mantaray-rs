@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::{Error, self}};
 
 use node::Node;
 use persist::LoaderSaver;
@@ -31,6 +31,8 @@ const NT_EDGE: u8 = 4;
 const NT_WITH_PATH_SEPARATOR: u8 = 8;
 const NT_WITH_METADATA: u8 = 16;
 const NT_MASK: u8 = 255;
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
 #[derive(Debug, Clone)]
 struct NotValueTypeError;
@@ -66,7 +68,7 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
     pub fn new_manifest_reference<'a>(
         reference: Reference<'a>,
         ls: Option<&'a T>,
-    ) -> Result<Manifest<'a, T>, String> {
+    ) -> Result<Manifest<'a, T>> {
         let mm = Manifest {
             ls,
             trie: Node::new_node_ref(reference),
@@ -76,7 +78,7 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
     }
 
     // add a path and entry to the manifest.
-    pub async fn add(&mut self, path: &str, entry: &Entry<'_>) -> Result<(), Box<dyn Error>> {
+    pub async fn add(&mut self, path: &str, entry: &Entry<'_>) -> Result<()> {
         self.trie
             .add(
                 path.as_bytes(),
@@ -88,12 +90,12 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
     }
 
     // remove a path from the manifest.
-    pub async fn remove(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn remove(&mut self, path: &str) -> Result<()> {
         self.trie.remove(path.as_bytes(), &self.ls).await
     }
 
     // lookup a path in the manifest.
-    pub async fn lookup(&mut self, path: &str) -> Result<Entry, Box<dyn Error>> {
+    pub async fn lookup(&mut self, path: &str) -> Result<Entry> {
         let n = self.trie.lookup_node(path.as_bytes(), &self.ls).await?;
 
         // if the node is not a value type, return not found.
@@ -111,7 +113,7 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
     }
 
     // determine if the manifest has a specified prefix.
-    pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool, Box<dyn Error>> {
+    pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool> {
         self.trie.has_prefix(prefix.as_bytes(), &self.ls).await
     }
 

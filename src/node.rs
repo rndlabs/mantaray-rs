@@ -1,5 +1,5 @@
 use crate::persist::LoaderSaver;
-use std::{collections::HashMap, error::Error, fmt};
+use std::{collections::HashMap, error::{Error, self}, fmt};
 
 use async_recursion::async_recursion;
 use serde::*;
@@ -9,6 +9,8 @@ use crate::{
     NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE, NT_EDGE, NT_MASK, NT_VALUE, NT_WITH_METADATA,
     NT_WITH_PATH_SEPARATOR, PATH_SEPARATOR,
 };
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -206,7 +208,7 @@ impl Node {
         &mut self,
         path: &[u8],
         l: &Option<&T>,
-    ) -> Result<&mut Node, Box<dyn Error>> {
+    ) -> Result<&mut Node> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
             self.load(l).await?;
@@ -220,7 +222,7 @@ impl Node {
         match self.forks.get_mut(&path[0]) {
             None => Err(Box::new(NoForkForNodeError {
                 cac: self.ref_.to_vec(),
-            }) as Box<dyn Error>),
+            }) as Box<dyn Error + Send>),
             Some(f) => {
                 // get the common prefix of the fork and the path
                 let c = common(&f.prefix, path);
@@ -242,7 +244,7 @@ impl Node {
         &mut self,
         path: &[u8],
         l: &Option<&T>,
-    ) -> Result<&[u8], Box<dyn Error>> {
+    ) -> Result<&[u8]> {
         let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
@@ -262,13 +264,13 @@ impl Node {
         entry: &[u8],
         metadata: HashMap<String, String>,
         ls: &Option<&T>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
                 return Err(Box::new(NodeEntryTooLargeError {
                     size: entry.len(),
                     max_size: 256,
-                }) as Box<dyn Error>);
+                }) as Box<dyn Error + Send>);
             }
             // empty entry for directories
             if !entry.is_empty() {
@@ -278,7 +280,7 @@ impl Node {
             return Err(Box::new(NodeEntrySizeMismatchError {
                 size: entry.len(),
                 expected_size: self.ref_bytes_size as usize,
-            }) as Box<dyn Error>);
+            }) as Box<dyn Error + Send>);
         }
 
         // if path is empty then set entry and return
@@ -437,10 +439,10 @@ impl Node {
         &mut self,
         path: &[u8],
         ls: &Option<&T>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
-            return Err(Box::new(EmptyPathError {}) as Box<dyn Error>);
+            return Err(Box::new(EmptyPathError {}) as Box<dyn Error + Send>);
         }
 
         // if forks is empty then load
@@ -453,7 +455,7 @@ impl Node {
         if f.is_none() {
             return Err(Box::new(PathPrefixNotFoundError {
                 path: vec![path[0]],
-            }) as Box<dyn Error>);
+            }) as Box<dyn Error + Send>);
         }
 
         // returns the index of the first instance of sep in s, or -1 if sep is not present in s.
@@ -481,7 +483,7 @@ impl Node {
         &mut self,
         path: &[u8],
         l: &Option<&T>,
-    ) -> Result<bool, Box<dyn Error>> {
+    ) -> Result<bool> {
         // if path is empty then return false
         if path.is_empty() {
             return Ok(true);
