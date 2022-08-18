@@ -524,7 +524,7 @@ mod tests {
     use test_case::test_case;
 
     struct TestCase<'a> {
-        name: String,
+        _name: String,
         items: Vec<&'a str>,
     }
 
@@ -536,7 +536,7 @@ mod tests {
 
     #[derive(Default, Clone)]
     struct HasPrefixTestCase {
-        name: String,
+        _name: String,
         paths: Vec<String>,
         test_paths: Vec<String>,
         should_exist: Vec<bool>,
@@ -544,7 +544,7 @@ mod tests {
 
     #[derive(Clone)]
     struct RemoveTestCase {
-        name: String,
+        _name: String,
         items: Vec<RemoveTestCaseItem>,
         remove: Vec<String>,
     }
@@ -564,24 +564,24 @@ mod tests {
     fn test_case_data() -> [TestCase<'static>; 6] {
         [
             TestCase {
-                name: "a".to_string(),
+                _name: "a".to_string(),
                 items: vec![
                     "aaaaaa", "aaaaab", "abbbb", "abbba", "bbbbba", "bbbaaa", "bbbaab", "aa", "b",
                 ],
             },
             TestCase {
-                name: "simple".to_string(),
+                _name: "simple".to_string(),
                 items: vec!["/", "index.html", "img/1.png", "img/2.png", "robots.txt"],
             },
             TestCase {
-                name: "nested-value-node-is-recognized".to_string(),
+                _name: "nested-value-node-is-recognized".to_string(),
                 items: vec![
                     "..............................@",
                     "..............................",
                 ],
             },
             TestCase {
-                name: "nested-prefix-is-not-collapsed".to_string(),
+                _name: "nested-prefix-is-not-collapsed".to_string(),
                 items: vec![
                     "index.html",
                     "img/1.png",
@@ -591,11 +591,11 @@ mod tests {
                 ],
             },
             TestCase {
-                name: "conflicting-path".to_string(),
+                _name: "conflicting-path".to_string(),
                 items: vec!["app.js.map", "app.js"],
             },
             TestCase {
-                name: "spa-website".to_string(),
+                _name: "spa-website".to_string(),
                 items: vec![
                     "css/",
                     "css/app.css",
@@ -616,7 +616,7 @@ mod tests {
     fn remove_test_case_data() -> Vec<RemoveTestCase> {
         vec![
             RemoveTestCase {
-                name: "simple".to_string(),
+                _name: "simple".to_string(),
                 items: vec![
                     RemoveTestCaseItem {
                         path: "/".to_string(),
@@ -647,7 +647,7 @@ mod tests {
                 remove: vec!["img/2.png".to_string()],
             },
             RemoveTestCase {
-                name: "nested-prefix-is-not-collapsed".to_string(),
+                _name: "nested-prefix-is-not-collapsed".to_string(),
                 items: vec![
                     RemoveTestCaseItem {
                         path: "index.html".to_string(),
@@ -678,7 +678,7 @@ mod tests {
     fn has_prefix_test_case_data() -> Vec<HasPrefixTestCase> {
         vec![
             HasPrefixTestCase {
-                name: "simple".to_string(),
+                _name: "simple".to_string(),
                 paths: vec![
                     "index.html".to_string(),
                     "img/1.png".to_string(),
@@ -689,7 +689,7 @@ mod tests {
                 should_exist: vec![true, false],
             },
             HasPrefixTestCase {
-                name: "nested-single".to_string(),
+                _name: "nested-single".to_string(),
                 paths: vec!["some-path/file.ext".to_string()],
                 test_paths: vec![
                     "some-path".to_string(),
