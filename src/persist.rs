@@ -136,10 +136,11 @@ impl LoaderSaver for MockLoadSaver {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BeeLoadSaver {
-    uri: String,
-    config: BeeConfig,
-    client: reqwest::Client,
+    pub uri: String,
+    pub config: BeeConfig,
+    pub client: reqwest::Client,
 }
 
 impl BeeLoadSaver {
