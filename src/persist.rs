@@ -2,12 +2,14 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use bee_api::BeeConfig;
 use std::{fmt, error};
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use std::{collections::HashMap, error::Error};
 
 use crate::{keccak256, marshal::Marshal, node::Node};
 
 type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
+type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
+
 
 #[derive(Debug, Clone)]
 struct NoLoaderError;
@@ -32,7 +34,7 @@ pub trait Saver {
 }
 
 #[async_trait]
-pub trait LoaderSaver: Sync {
+pub trait LoaderSaver: Debug + Display + Sync {
     async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
     async fn as_dyn(&self) -> &dyn LoaderSaver;
@@ -105,13 +107,18 @@ pub type Address = [u8; 32];
 
 #[derive(Debug, Default)]
 pub struct MockLoadSaver {
-    store: Mutex<HashMap<Address, Vec<u8>>>,
+    store: Arc<Mutex<HashMap<Address, Vec<u8>>>>,
 }
 
+impl  Display for MockLoadSaver {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MockLoadSaver")
+    }
+}
 impl MockLoadSaver {
     pub fn new() -> MockLoadSaver {
         MockLoadSaver {
-            store: Mutex::new(HashMap::new()),
+            store: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -149,6 +156,52 @@ impl BeeLoadSaver {
             uri,
             config,
             client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl LoaderSaver for Box<dyn LoaderSaver + Send> {
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
+        self.as_ref()
+    }
+
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+        self.as_ref().load(ref_).await
+    }
+
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+        self.as_ref().save(data).await
+    }
+}
+
+#[async_trait]
+impl LoaderSaver for Arc<BeeLoadSaver> {
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
+        self.as_ref()
+    }
+
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+        Ok(
+            bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
+                .await?
+                .0,
+        )
+    }
+
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+        match hex::decode(bee_api::bytes_post(
+            self.client.clone(),
+            self.uri.clone(),
+            data.to_vec(),
+            self.config
+                .upload
+                .as_ref()
+                .expect("UploadConfig not specified"),
+        )
+        .await?.ref_) {
+            Ok(ref_) => Ok(ref_),
+            Err(e) => Err(Box::new(e)),
         }
     }
 }
