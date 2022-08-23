@@ -402,10 +402,11 @@ impl Marshal for Fork {
 
         if self.node.is_with_metadata_type() {
             // using json encoding to marshal the metadata
-            let mut metadata_json_bytes = serde_json::to_string(&self.node.metadata).unwrap();
+            let mut metadata_json_bytes = serde_json::to_string(&self.node.metadata).unwrap().as_bytes().to_vec();
             // get the metadata size in bytes
+            let metadata_bytes_size = metadata_json_bytes.len();
             let metadata_bytes_size_with_size =
-                metadata_json_bytes.len() + NODE_FORK_METADATA_BYTES_SIZE;
+                metadata_bytes_size + NODE_FORK_METADATA_BYTES_SIZE;
 
             let padding = match metadata_bytes_size_with_size {
                 x if x < NODE_OBFUSCATION_KEY_SIZE => {
@@ -420,26 +421,26 @@ impl Marshal for Fork {
 
             // add the padding to the metadata_json_bytes
             for _ in 0..padding {
-                metadata_json_bytes.push('\n');
+                metadata_json_bytes.push(0x0a);
             }
 
             // make sure the metadata size is less than the u16 size
-            if metadata_bytes_size_with_size > u16::MAX as usize {
+            if metadata_bytes_size > u16::MAX as usize {
                 return Err(Box::new(MetadataSizeTooLargeError {
                     expected: u16::MAX as usize,
-                    actual: metadata_bytes_size_with_size,
+                    actual: metadata_bytes_size,
                 }));
             }
 
-            // convert metadata_bytes_size_with_size to u16
-            let metadata_bytes_size_with_size_u16: u16 =
-                metadata_bytes_size_with_size.try_into().unwrap();
+            // convert metadata_bytes_size to u16
+            let metadata_bytes_size_u16: u16 =
+                metadata_bytes_size.try_into().unwrap();
 
             // append the metadata_bytes_size_with_size_u16 to the vector
-            data.extend_from_slice(&metadata_bytes_size_with_size_u16.to_be_bytes());
+            data.extend_from_slice(&metadata_bytes_size_u16.to_be_bytes());
 
             // append the metadata to the vector
-            data.extend_from_slice(metadata_json_bytes.as_bytes());
+            data.extend_from_slice(metadata_json_bytes.as_slice());
         }
 
         // return the marshaled fork
