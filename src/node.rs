@@ -1,4 +1,4 @@
-use crate::persist::LoaderSaver;
+use crate::persist::DynLoaderSaver;
 use std::{collections::HashMap, error::{Error, self}, fmt};
 
 use async_recursion::async_recursion;
@@ -204,10 +204,10 @@ impl Node {
 
     // lookupnode finds the node for a path or returns error if not found.
     #[async_recursion]
-    pub async fn lookup_node<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn lookup_node(
         &mut self,
         path: &[u8],
-        l: &Option<&T>,
+        l: &Option<DynLoaderSaver>,
     ) -> Result<&mut Node> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
@@ -240,10 +240,10 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub async fn lookup<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn lookup(
         &mut self,
         path: &[u8],
-        l: &Option<&T>,
+        l: &Option<DynLoaderSaver>,
     ) -> Result<&[u8]> {
         let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
@@ -258,12 +258,12 @@ impl Node {
 
     // Add adds an entry to the path with metadata
     #[async_recursion]
-    pub async fn add<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn add(
         &mut self,
         path: &[u8],
         entry: &[u8],
         metadata: HashMap<String, String>,
-        ls: &Option<&T>,
+        ls: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
@@ -435,10 +435,10 @@ impl Node {
 
     // remove removes a path from the node
     #[async_recursion]
-    pub async fn remove<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn remove(
         &mut self,
         path: &[u8],
-        ls: &Option<&T>,
+        ls: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
@@ -479,10 +479,10 @@ impl Node {
 
     // hasprefix tests whether the node contains prefix path
     #[async_recursion]
-    pub async fn has_prefix<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn has_prefix(
         &mut self,
         path: &[u8],
-        l: &Option<&T>,
+        l: &Option<DynLoaderSaver>,
     ) -> Result<bool> {
         // if path is empty then return false
         if path.is_empty() {
@@ -520,6 +520,9 @@ impl Node {
 #[cfg(test)]
 mod tests {
 
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
     use crate::persist::MockLoadSaver;
 
     use super::*;
@@ -555,7 +558,7 @@ mod tests {
     async fn nil_path() {
         let mut n = Node::default();
         assert_eq!(
-            n.lookup::<dyn LoaderSaver>("".as_bytes(), &None)
+            n.lookup("".as_bytes(), &None)
                 .await
                 .is_ok(),
             true
@@ -714,7 +717,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, HashMap::new(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -722,7 +725,7 @@ mod tests {
 
             for j in 0..i {
                 let d = test_case_data()[0].items[j].as_bytes();
-                let m = n.lookup::<dyn LoaderSaver>(d, &None);
+                let m = n.lookup(d, &None);
                 let r = m.await;
                 assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
@@ -753,7 +756,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, HashMap::new(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -762,7 +765,7 @@ mod tests {
             for j in 0..i {
                 let d = tc[j];
                 let node = n
-                    .lookup_node::<dyn LoaderSaver>(d.as_bytes(), &None)
+                    .lookup_node(d.as_bytes(), &None)
                     .await
                     .unwrap();
                 assert_eq!(node.is_value_type(), true);
@@ -794,22 +797,22 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, HashMap::new(), &None)
                     .await
                     .unwrap(),
                 ()
             );
         }
 
-        let ls = MockLoadSaver::new();
+        let ls = Arc::new(Mutex::new(MockLoadSaver::new()));
 
-        let save = n.save(&Some(&ls)).await;
+        let save = n.save(&Some(Box::new(ls.clone()))).await;
         assert_eq!(save.is_ok(), true);
 
         let mut n2 = Node::new_node_ref(&n.ref_);
 
         for d in tc {
-            let node = n2.lookup_node(d.as_bytes(), &Some(&ls)).await.unwrap();
+            let node = n2.lookup_node(d.as_bytes(), &Some(Box::new(ls.clone()))).await.unwrap();
             assert_eq!(node.is_value_type(), true);
             let de = vec![0; 32 - d.len()]
                 .iter()
@@ -833,7 +836,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.path.as_bytes(), &e, c.metadata.clone(), &None)
+                n.add(c.path.as_bytes(), &e, c.metadata.clone(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -841,7 +844,7 @@ mod tests {
 
             for j in 0..i {
                 let d = &tc.items[j].path;
-                let m = n.lookup::<dyn LoaderSaver>(d.as_bytes(), &None);
+                let m = n.lookup(d.as_bytes(), &None);
                 let r = m.await;
                 assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
@@ -856,13 +859,13 @@ mod tests {
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
             assert_eq!(
-                n.remove::<dyn LoaderSaver>(c.as_bytes(), &None)
+                n.remove(c.as_bytes(), &None)
                     .await
                     .unwrap(),
                 ()
             );
 
-            let lookup = n.lookup::<dyn LoaderSaver>(c.as_bytes(), &None);
+            let lookup = n.lookup(c.as_bytes(), &None);
             assert_eq!(lookup.await.is_err(), true);
         }
     }
@@ -881,7 +884,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add::<dyn LoaderSaver>(c.as_bytes(), &e, Default::default(), &None)
+                n.add(c.as_bytes(), &e, Default::default(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -889,7 +892,7 @@ mod tests {
         }
 
         for (i, test_prefix) in tc.test_paths.iter().enumerate() {
-            let has_prefix = n.has_prefix::<dyn LoaderSaver>(test_prefix.as_bytes(), &None);
+            let has_prefix = n.has_prefix(test_prefix.as_bytes(), &None);
             assert_eq!(has_prefix.await.unwrap(), tc.should_exist[i]);
         }
     }

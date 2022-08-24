@@ -1,7 +1,7 @@
 use std::{collections::HashMap, error::{Error, self}};
 
 use node::Node;
-use persist::LoaderSaver;
+use persist::{DynLoaderSaver};
 use tiny_keccak::{Hasher, Keccak};
 
 pub mod marshal;
@@ -40,19 +40,18 @@ impl std::fmt::Display for NotValueTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Not a value type")
     }
-}
-impl Error for NotValueTypeError {}
 
-pub struct Manifest<'a, T: LoaderSaver + ?Sized + std::marker::Sync> {
+
+pub struct Manifest {
     pub trie: Node,
-    ls: Option<&'a T>,
+    ls: Option<DynLoaderSaver>,
 }
 
-impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
+impl Manifest {
     // new manataray manifest creates a new mantaray-based manifest.
-    pub fn new(ls: Option<&T>, encrypted: bool) -> Manifest<T> {
+    pub fn new(ls: DynLoaderSaver, encrypted: bool) -> Manifest {
         let mut mm = Manifest {
-            ls,
+            ls: Some(ls),
             trie: Node::default(),
         };
 
@@ -65,12 +64,12 @@ impl<T: LoaderSaver + ?Sized + std::marker::Sync> Manifest<'_, T> {
     }
 
     // new_manifest_reference loads existing mantaray-based manifest.
-    pub fn new_manifest_reference<'a>(
-        reference: Reference<'a>,
-        ls: Option<&'a T>,
-    ) -> Result<Manifest<'a, T>> {
+    pub fn new_manifest_reference(
+        reference: Reference,
+        ls: DynLoaderSaver,
+    ) -> Result<Manifest> {
         let mm = Manifest {
-            ls,
+            ls: Some(ls),
             trie: Node::new_node_ref(reference),
         };
 

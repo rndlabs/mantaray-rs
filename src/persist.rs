@@ -1,5 +1,6 @@
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 use bee_api::BeeConfig;
 use std::{fmt, error};
 use std::sync::{Mutex, Arc};
@@ -17,8 +18,8 @@ impl fmt::Display for NoLoaderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "No loader provided")
     }
-}
-impl Error for NoLoaderError {}
+
+pub type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
 
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 #[async_trait]
@@ -27,14 +28,13 @@ pub trait Loader {
 }
 
 // saver defines a trait that stores nodes by reference to a storage backend.
-
 #[async_trait]
 pub trait Saver {
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
 }
 
 #[async_trait]
-pub trait LoaderSaver: Debug + Display + Sync {
+pub trait LoaderSaver: Debug + Sync {
     async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
     async fn as_dyn(&self) -> &dyn LoaderSaver;
@@ -42,9 +42,9 @@ pub trait LoaderSaver: Debug + Display + Sync {
 
 impl Node {
     // a load function for nodes
-    pub async fn load<T: LoaderSaver + ?Sized>(
+    pub async fn load(
         &mut self,
-        l: &Option<&T>,
+        l: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
@@ -58,7 +58,7 @@ impl Node {
 
         // load the node from the storage backend
         let ref_ = self.ref_.clone();
-        let mut data = l.unwrap().load(&ref_).await?;
+        let mut data = l.as_ref().unwrap().load(&ref_).await?;
 
         // unmarshall the node from dta into self
         self.unmarshal_binary(&mut data)?;
@@ -68,17 +68,17 @@ impl Node {
     }
 
     // save persists a trie recursively traversing the nodes
-    pub async fn save<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn save(
         &mut self,
-        s: &Option<&T>,
+        s: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         self.save_recursive(s).await
     }
 
     #[async_recursion]
-    pub async fn save_recursive<T: LoaderSaver + ?Sized + std::marker::Sync>(
+    pub async fn save_recursive(
         &mut self,
-        s: &Option<&T>,
+        s: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         // if ref_ is already a reference, return
         if !self.ref_.is_empty() {
@@ -110,11 +110,6 @@ pub struct MockLoadSaver {
     store: Arc<Mutex<HashMap<Address, Vec<u8>>>>,
 }
 
-impl  Display for MockLoadSaver {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "MockLoadSaver")
-    }
-}
 impl MockLoadSaver {
     pub fn new() -> MockLoadSaver {
         MockLoadSaver {
@@ -130,13 +125,13 @@ impl LoaderSaver for MockLoadSaver {
     }
 
     async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
-        let store = self.store.lock().unwrap();
+        let store = self.store.lock().await;
         let data = store.get(ref_).unwrap();
         Ok(data.clone())
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let mut store = self.store.lock().unwrap();
+        let mut store = self.store.lock().await;
         let ref_ = keccak256(data);
         store.insert(ref_, data.to_vec());
         Ok(ref_.to_vec())
@@ -203,6 +198,36 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
             Ok(ref_) => Ok(ref_),
             Err(e) => Err(Box::new(e)),
         }
+    }
+}
+
+#[async_trait]
+impl LoaderSaver for Mutex<MockLoadSaver> {
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
+        self
+    }
+
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+        self.lock().await.load(ref_).await
+    }
+
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+        self.lock().await.save(data).await
+    }
+}
+
+#[async_trait]
+impl LoaderSaver for Arc<Mutex<MockLoadSaver>> {
+    async fn as_dyn(&self) -> &dyn LoaderSaver {
+        self
+    }
+
+    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+        self.lock().await.load(ref_).await
+    }
+
+    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+        self.lock().await.save(data).await
     }
 }
 
