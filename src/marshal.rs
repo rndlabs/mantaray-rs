@@ -1,8 +1,11 @@
+use std::error::Error;
+
 use const_format::concatcp;
 use rand::RngCore;
 
 use crate::{
     node::{Fork, Node},
+    Result,
     NODE_FORK_HEADER_SIZE, NODE_FORK_METADATA_BYTES_SIZE, NODE_FORK_PRE_REFERENCE_SIZE,
     NODE_FORK_TYPE_BYTES_SIZE, NODE_HEADER_SIZE, NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE,
     NT_WITH_METADATA, VERSION_HASH_SIZE,
@@ -22,8 +25,6 @@ const VERSION_HASH_01: &str = "025184789d63635766d78c41900196b57d7400875ebe4d9b5
 const VERSION_STRING_02: &str = concatcp!(VERSION_NAME, VERSION_SEPARATOR, VERSION_CODE_02);
 // pre-calculated version string, Keccak-256
 const VERSION_HASH_02: &str = "5768b3b6a7db56d21d1abff40d41cebfc83448fed8d7e9b06ec0d3b073f28f7b";
-
-type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
 #[derive(Debug, Clone)]
 struct DataLengthTooSmallError;

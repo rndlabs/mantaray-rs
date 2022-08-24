@@ -1,16 +1,16 @@
 use crate::persist::DynLoaderSaver;
-use std::{collections::HashMap, error::{Error, self}, fmt};
+use std::{collections::HashMap, error::Error, fmt};
 
 use async_recursion::async_recursion;
 use serde::*;
 use serde_with::serde_as;
 
+use crate::Result;
+
 use crate::{
     NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE, NT_EDGE, NT_MASK, NT_VALUE, NT_WITH_METADATA,
     NT_WITH_PATH_SEPARATOR, PATH_SEPARATOR,
 };
-
-type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

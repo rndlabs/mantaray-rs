@@ -1,22 +1,19 @@
+use std::fmt::Debug;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::collections::HashMap;
+use thiserror::Error;
 use bee_api::BeeConfig;
-use std::{fmt, error};
-use std::sync::{Mutex, Arc};
-use std::{collections::HashMap, error::Error};
+use crate::Result;
 
 use crate::{keccak256, marshal::Marshal, node::Node};
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
-type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
-
-
-#[derive(Debug, Clone)]
-struct NoLoaderError;
-impl fmt::Display for NoLoaderError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "No loader provided")
+#[derive(Error, Debug, Clone)]
+pub enum MantarayPersistError {
+    #[error("No loader provided")]
+    NoLoaderError,
     }
 
 pub type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
@@ -53,7 +50,7 @@ impl Node {
 
         // if l is not a loader, return no loader error
         if l.is_none() {
-            return Err(Box::new(NoLoaderError));
+            return Err(Box::new(MantarayPersistError::NoLoaderError));
         }
 
         // load the node from the storage backend

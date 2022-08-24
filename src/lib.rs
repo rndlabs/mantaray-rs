@@ -1,8 +1,9 @@
-use std::{collections::HashMap, error::{Error, self}};
+use std::{collections::HashMap, error};
 
 use node::Node;
 use persist::{DynLoaderSaver};
 use tiny_keccak::{Hasher, Keccak};
+use thiserror::Error;
 
 pub mod marshal;
 pub mod node;
@@ -32,13 +33,12 @@ const NT_WITH_PATH_SEPARATOR: u8 = 8;
 const NT_WITH_METADATA: u8 = 16;
 const NT_MASK: u8 = 255;
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
+pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 
-#[derive(Debug, Clone)]
-struct NotValueTypeError;
-impl std::fmt::Display for NotValueTypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Not a value type")
+#[derive(Error, Debug, Clone)]
+pub enum MantarayError {
+    #[error("Not a value type")]
+    NotValueType,
     }
 
 
@@ -99,7 +99,7 @@ impl Manifest {
 
         // if the node is not a value type, return not found.
         if !n.is_value_type() {
-            return Err(Box::new(NotValueTypeError {}));
+            return Err(Box::new(MantarayError::NotValueType));
         }
 
         // copy the metadata from the node.
