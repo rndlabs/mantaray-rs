@@ -548,7 +548,7 @@ impl BitField {
     // get whether the bit at the given index is greater than 0
     // TODO: This potentially does not work
     pub fn get(&self, i: u8) -> bool {
-        (self.bits[i as usize / 8] >> (i % 8)) & 1 > 0
+        self.bits[i as usize / 8] & (1 << (i % 8)) != 0
     }
 }
 
