@@ -240,11 +240,7 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub async fn lookup(
-        &mut self,
-        path: &[u8],
-        l: &Option<DynLoaderSaver>,
-    ) -> Result<&[u8]> {
+    pub async fn lookup(&mut self, path: &[u8], l: &Option<DynLoaderSaver>) -> Result<&[u8]> {
         let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
@@ -435,11 +431,7 @@ impl Node {
 
     // remove removes a path from the node
     #[async_recursion]
-    pub async fn remove(
-        &mut self,
-        path: &[u8],
-        ls: &Option<DynLoaderSaver>,
-    ) -> Result<()> {
+    pub async fn remove(&mut self, path: &[u8], ls: &Option<DynLoaderSaver>) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
             return Err(Box::new(EmptyPathError {}) as Box<dyn Error + Send>);
@@ -479,11 +471,7 @@ impl Node {
 
     // hasprefix tests whether the node contains prefix path
     #[async_recursion]
-    pub async fn has_prefix(
-        &mut self,
-        path: &[u8],
-        l: &Option<DynLoaderSaver>,
-    ) -> Result<bool> {
+    pub async fn has_prefix(&mut self, path: &[u8], l: &Option<DynLoaderSaver>) -> Result<bool> {
         // if path is empty then return false
         if path.is_empty() {
             return Ok(true);
@@ -557,12 +545,7 @@ mod tests {
     #[tokio::test]
     async fn nil_path() {
         let mut n = Node::default();
-        assert_eq!(
-            n.lookup("".as_bytes(), &None)
-                .await
-                .is_ok(),
-            true
-        );
+        assert_eq!(n.lookup("".as_bytes(), &None).await.is_ok(), true);
     }
 
     // test data
@@ -764,10 +747,7 @@ mod tests {
 
             for j in 0..i {
                 let d = tc[j];
-                let node = n
-                    .lookup_node(d.as_bytes(), &None)
-                    .await
-                    .unwrap();
+                let node = n.lookup_node(d.as_bytes(), &None).await.unwrap();
                 assert_eq!(node.is_value_type(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
@@ -812,7 +792,10 @@ mod tests {
         let mut n2 = Node::new_node_ref(&n.ref_);
 
         for d in tc {
-            let node = n2.lookup_node(d.as_bytes(), &Some(Box::new(ls.clone()))).await.unwrap();
+            let node = n2
+                .lookup_node(d.as_bytes(), &Some(Box::new(ls.clone())))
+                .await
+                .unwrap();
             assert_eq!(node.is_value_type(), true);
             let de = vec![0; 32 - d.len()]
                 .iter()
@@ -858,12 +841,7 @@ mod tests {
 
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
-            assert_eq!(
-                n.remove(c.as_bytes(), &None)
-                    .await
-                    .unwrap(),
-                ()
-            );
+            assert_eq!(n.remove(c.as_bytes(), &None).await.unwrap(), ());
 
             let lookup = n.lookup(c.as_bytes(), &None);
             assert_eq!(lookup.await.is_err(), true);

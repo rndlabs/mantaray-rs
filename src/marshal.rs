@@ -5,8 +5,7 @@ use rand::RngCore;
 
 use crate::{
     node::{Fork, Node},
-    Result,
-    NODE_FORK_HEADER_SIZE, NODE_FORK_METADATA_BYTES_SIZE, NODE_FORK_PRE_REFERENCE_SIZE,
+    Result, NODE_FORK_HEADER_SIZE, NODE_FORK_METADATA_BYTES_SIZE, NODE_FORK_PRE_REFERENCE_SIZE,
     NODE_FORK_TYPE_BYTES_SIZE, NODE_HEADER_SIZE, NODE_OBFUSCATION_KEY_SIZE, NODE_PREFIX_MAX_SIZE,
     NT_WITH_METADATA, VERSION_HASH_SIZE,
 };
@@ -108,7 +107,6 @@ impl std::fmt::Display for InvalidPrefixLengthError {
     }
 }
 impl Error for InvalidPrefixLengthError {}
-
 
 pub trait Marshal {
     type Item;
@@ -241,7 +239,9 @@ impl Marshal for Node {
                     if data.len() < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize
                     {
                         return Err(Box::new(NodeForkInsufficientBytesError {
-                            expected: offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize,
+                            expected: offset
+                                + NODE_FORK_PRE_REFERENCE_SIZE
+                                + ref_bytes_size as usize,
                             actual: data.len(),
                             on_byte: b as usize,
                         }));
@@ -365,7 +365,7 @@ impl Marshal for Node {
             Ok(())
         } else {
             // return invalid input
-            Err(Box::new(InvalidVersionHashError { }))
+            Err(Box::new(InvalidVersionHashError {}))
         }
     }
 }
@@ -401,11 +401,13 @@ impl Marshal for Fork {
 
         if self.node.is_with_metadata_type() {
             // using json encoding to marshal the metadata
-            let mut metadata_json_bytes = serde_json::to_string(&self.node.metadata).unwrap().as_bytes().to_vec();
+            let mut metadata_json_bytes = serde_json::to_string(&self.node.metadata)
+                .unwrap()
+                .as_bytes()
+                .to_vec();
             // get the metadata size in bytes
             let metadata_bytes_size = metadata_json_bytes.len();
-            let metadata_bytes_size_with_size =
-                metadata_bytes_size + NODE_FORK_METADATA_BYTES_SIZE;
+            let metadata_bytes_size_with_size = metadata_bytes_size + NODE_FORK_METADATA_BYTES_SIZE;
 
             let padding = match metadata_bytes_size_with_size {
                 x if x < NODE_OBFUSCATION_KEY_SIZE => {
@@ -432,8 +434,7 @@ impl Marshal for Fork {
             }
 
             // convert metadata_bytes_size to u16
-            let metadata_bytes_size_u16: u16 =
-                metadata_bytes_size.try_into().unwrap();
+            let metadata_bytes_size_u16: u16 = metadata_bytes_size.try_into().unwrap();
 
             // append the metadata_bytes_size_with_size_u16 to the vector
             data.extend_from_slice(&metadata_bytes_size_u16.to_be_bytes());

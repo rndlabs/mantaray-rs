@@ -1,12 +1,12 @@
-use std::fmt::Debug;
+use crate::Result;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use std::collections::HashMap;
-use thiserror::Error;
 use bee_api::BeeConfig;
-use crate::Result;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::Mutex;
 
 use crate::{keccak256, marshal::Marshal, node::Node};
 
@@ -39,10 +39,7 @@ pub trait LoaderSaver: Debug + Sync {
 
 impl Node {
     // a load function for nodes
-    pub async fn load(
-        &mut self,
-        l: &Option<DynLoaderSaver>,
-    ) -> Result<()> {
+    pub async fn load(&mut self, l: &Option<DynLoaderSaver>) -> Result<()> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -65,18 +62,12 @@ impl Node {
     }
 
     // save persists a trie recursively traversing the nodes
-    pub async fn save(
-        &mut self,
-        s: &Option<DynLoaderSaver>,
-    ) -> Result<()> {
+    pub async fn save(&mut self, s: &Option<DynLoaderSaver>) -> Result<()> {
         self.save_recursive(s).await
     }
 
     #[async_recursion]
-    pub async fn save_recursive(
-        &mut self,
-        s: &Option<DynLoaderSaver>,
-    ) -> Result<()> {
+    pub async fn save_recursive(&mut self, s: &Option<DynLoaderSaver>) -> Result<()> {
         // if ref_ is already a reference, return
         if !self.ref_.is_empty() {
             return Ok(());
@@ -182,16 +173,19 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
-        match hex::decode(bee_api::bytes_post(
-            self.client.clone(),
-            self.uri.clone(),
-            data.to_vec(),
-            self.config
-                .upload
-                .as_ref()
-                .expect("UploadConfig not specified"),
-        )
-        .await?.ref_) {
+        match hex::decode(
+            bee_api::bytes_post(
+                self.client.clone(),
+                self.uri.clone(),
+                data.to_vec(),
+                self.config
+                    .upload
+                    .as_ref()
+                    .expect("UploadConfig not specified"),
+            )
+            .await?
+            .ref_,
+        ) {
             Ok(ref_) => Ok(ref_),
             Err(e) => Err(Box::new(e)),
         }
@@ -243,16 +237,19 @@ impl LoaderSaver for BeeLoadSaver {
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
-        match hex::decode(bee_api::bytes_post(
-            self.client.clone(),
-            self.uri.clone(),
-            data.to_vec(),
-            self.config
-                .upload
-                .as_ref()
-                .expect("UploadConfig not specified"),
-        )
-        .await?.ref_) {
+        match hex::decode(
+            bee_api::bytes_post(
+                self.client.clone(),
+                self.uri.clone(),
+                data.to_vec(),
+                self.config
+                    .upload
+                    .as_ref()
+                    .expect("UploadConfig not specified"),
+            )
+            .await?
+            .ref_,
+        ) {
             Ok(ref_) => Ok(ref_),
             Err(e) => Err(Box::new(e)),
         }

@@ -1,9 +1,9 @@
 use std::{collections::HashMap, error};
 
 use node::Node;
-use persist::{DynLoaderSaver};
-use tiny_keccak::{Hasher, Keccak};
+use persist::DynLoaderSaver;
 use thiserror::Error;
+use tiny_keccak::{Hasher, Keccak};
 
 pub mod marshal;
 pub mod node;
@@ -41,7 +41,6 @@ pub enum MantarayError {
     NotValueType,
 }
 
-
 pub struct Manifest {
     pub trie: Node,
     ls: Option<DynLoaderSaver>,
@@ -64,10 +63,7 @@ impl Manifest {
     }
 
     // new_manifest_reference loads existing mantaray-based manifest.
-    pub fn new_manifest_reference(
-        reference: Reference,
-        ls: DynLoaderSaver,
-    ) -> Result<Manifest> {
+    pub fn new_manifest_reference(reference: Reference, ls: DynLoaderSaver) -> Result<Manifest> {
         let mm = Manifest {
             ls: Some(ls),
             trie: Node::new_node_ref(reference),
@@ -113,21 +109,33 @@ impl Manifest {
 
     // determine if the manifest has a specified prefix.
     pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool> {
-        self.trie.has_prefix(&prefix.as_bytes().to_vec(), &self.ls).await
+        self.trie
+            .has_prefix(&prefix.as_bytes().to_vec(), &self.ls)
+            .await
     }
 
     pub async fn set_root(&mut self, metadata: HashMap<String, String>) -> Result<()> {
         // const rootMeta = { "website-index-document": index }
-		// node.addFork(new TextEncoder().encode('/'), hexToBytes(zeroAddress), rootMeta)
+        // node.addFork(new TextEncoder().encode('/'), hexToBytes(zeroAddress), rootMeta)
 
-		// const rootFork = node.getForkAtPath(new TextEncoder().encode('/'))
-		// const rootNode = rootFork.node
-		// let type = rootNode.getType
-		// type |= NodeType.value
-		// type = (NodeType.mask ^ NodeType.withPathSeparator) & type
-		// rootNode.setType = type
-        self.trie.add(&"/".as_bytes().to_vec(), &vec![0; 32].to_vec(), metadata, &self.ls).await?;
-        let mut root_node = self.trie.lookup_node(&"/".as_bytes().to_vec(), &self.ls).await?;
+        // const rootFork = node.getForkAtPath(new TextEncoder().encode('/'))
+        // const rootNode = rootFork.node
+        // let type = rootNode.getType
+        // type |= NodeType.value
+        // type = (NodeType.mask ^ NodeType.withPathSeparator) & type
+        // rootNode.setType = type
+        self.trie
+            .add(
+                &"/".as_bytes().to_vec(),
+                &vec![0; 32].to_vec(),
+                metadata,
+                &self.ls,
+            )
+            .await?;
+        let mut root_node = self
+            .trie
+            .lookup_node(&"/".as_bytes().to_vec(), &self.ls)
+            .await?;
         let mut type_ = root_node.node_type;
         type_ |= NT_VALUE;
         type_ = (NT_MASK ^ NT_WITH_PATH_SEPARATOR) & type_;
