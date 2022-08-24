@@ -14,7 +14,7 @@ use crate::{keccak256, marshal::Marshal, node::Node};
 pub enum MantarayPersistError {
     #[error("No loader provided")]
     NoLoaderError,
-    }
+}
 
 pub type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
 

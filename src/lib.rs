@@ -39,7 +39,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 pub enum MantarayError {
     #[error("Not a value type")]
     NotValueType,
-    }
+}
 
 
 pub struct Manifest {
@@ -113,7 +113,30 @@ impl Manifest {
 
     // determine if the manifest has a specified prefix.
     pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool> {
-        self.trie.has_prefix(prefix.as_bytes(), &self.ls).await
+        self.trie.has_prefix(&prefix.as_bytes().to_vec(), &self.ls).await
+    }
+
+    pub async fn set_root(&mut self, metadata: HashMap<String, String>) -> Result<()> {
+        // const rootMeta = { "website-index-document": index }
+		// node.addFork(new TextEncoder().encode('/'), hexToBytes(zeroAddress), rootMeta)
+
+		// const rootFork = node.getForkAtPath(new TextEncoder().encode('/'))
+		// const rootNode = rootFork.node
+		// let type = rootNode.getType
+		// type |= NodeType.value
+		// type = (NodeType.mask ^ NodeType.withPathSeparator) & type
+		// rootNode.setType = type
+        self.trie.add(&"/".as_bytes().to_vec(), &vec![0; 32].to_vec(), metadata, &self.ls).await?;
+        let mut root_node = self.trie.lookup_node(&"/".as_bytes().to_vec(), &self.ls).await?;
+        let mut type_ = root_node.node_type;
+        type_ |= NT_VALUE;
+        type_ = (NT_MASK ^ NT_WITH_PATH_SEPARATOR) & type_;
+        root_node.node_type = type_;
+        Ok(())
+    }
+
+    pub async fn save(&mut self) -> Result<()> {
+        self.trie.save(&Box::new(&self.ls)).await
     }
 
     // todo!{"Finish manifest implementation"}
