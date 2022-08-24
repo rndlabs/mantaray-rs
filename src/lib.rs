@@ -109,9 +109,7 @@ impl Manifest {
 
     // determine if the manifest has a specified prefix.
     pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool> {
-        self.trie
-            .has_prefix(&prefix.as_bytes().to_vec(), &self.ls)
-            .await
+        self.trie.has_prefix(prefix.as_bytes(), &self.ls).await
     }
 
     pub async fn set_root(&mut self, metadata: HashMap<String, String>) -> Result<()> {
@@ -125,20 +123,12 @@ impl Manifest {
         // type = (NodeType.mask ^ NodeType.withPathSeparator) & type
         // rootNode.setType = type
         self.trie
-            .add(
-                &"/".as_bytes().to_vec(),
-                &vec![0; 32].to_vec(),
-                metadata,
-                &self.ls,
-            )
+            .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &self.ls)
             .await?;
-        let mut root_node = self
-            .trie
-            .lookup_node(&"/".as_bytes().to_vec(), &self.ls)
-            .await?;
+        let mut root_node = self.trie.lookup_node("/".as_bytes(), &self.ls).await?;
         let mut type_ = root_node.node_type;
         type_ |= NT_VALUE;
-        type_ = (NT_MASK ^ NT_WITH_PATH_SEPARATOR) & type_;
+        type_ &= NT_MASK ^ NT_WITH_PATH_SEPARATOR;
         root_node.node_type = type_;
         Ok(())
     }

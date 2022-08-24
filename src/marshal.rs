@@ -421,9 +421,7 @@ impl Marshal for Fork {
             };
 
             // add the padding to the metadata_json_bytes
-            for _ in 0..padding {
-                metadata_json_bytes.push(0x0a);
-            }
+            metadata_json_bytes.resize(metadata_json_bytes.len() + padding, 0x0a);
 
             // make sure the metadata size is less than the u16 size
             if metadata_bytes_size > u16::MAX as usize {
