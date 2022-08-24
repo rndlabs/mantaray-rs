@@ -365,6 +365,8 @@ impl Marshal for Fork {
             // add the padding to the metadata_json_bytes
             metadata_json_bytes.resize(metadata_json_bytes.len() + padding, 0x0a);
 
+            let metadata_bytes_size = metadata_json_bytes.len();
+
             // make sure the metadata size is less than the u16 size
             if metadata_bytes_size > u16::MAX as usize {
                 return Err(Box::new(MantarayMarshalError::MetadataSizeTooLargeError(
