@@ -1,9 +1,10 @@
 use crate::persist::DynLoaderSaver;
-use std::{collections::HashMap, error::Error, fmt};
+use std::{collections::HashMap, error::Error};
 
 use async_recursion::async_recursion;
 use serde::*;
 use serde_with::serde_as;
+use thiserror::Error;
 
 use crate::Result;
 
@@ -35,78 +36,21 @@ pub struct Fork {
     pub node: Node,
 }
 
-// structs for errors
-// None => Err(format!("No fork found for node: {:?}", self.ref_)),
-
-#[derive(Debug, Clone)]
-struct NoForkForNodeError {
-    cac: Vec<u8>,
+#[derive(Error, Debug, Clone)]
+pub enum MantarayNodeError {
+    #[error("No fork found for node: {0}")]
+    NoForkForNode(String),
+    #[error("No entry found for node: {0}")]
+    NoEntryForNode(String),
+    #[error("Node entry too large: {0} > {1}")]
+    NodeEntryTooLarge(usize, usize),
+    #[error("Node entry size mismatch: {0} != {1}")]
+    NodeEntrySizeMismatch(usize, usize),
+    #[error("Empty path")]
+    EmptyPath,
+    #[error("Path prefix not found: {0}")]
+    PathPrefixNotFound(String),
 }
-impl fmt::Display for NoForkForNodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "No fork found for node: {:?}", self.cac)
-    }
-}
-impl Error for NoForkForNodeError {}
-
-#[derive(Debug, Clone)]
-struct NoEntryForNodeError {
-    cac: Vec<u8>,
-}
-impl fmt::Display for NoEntryForNodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "No entry found for node: {:?}", self.cac)
-    }
-}
-impl Error for NoEntryForNodeError {}
-
-#[derive(Debug, Clone)]
-struct NodeEntryTooLargeError {
-    size: usize,
-    max_size: usize,
-}
-impl fmt::Display for NodeEntryTooLargeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Node entry too large: {} > {}", self.size, self.max_size)
-    }
-}
-impl Error for NodeEntryTooLargeError {}
-
-#[derive(Debug, Clone)]
-struct NodeEntrySizeMismatchError {
-    size: usize,
-    expected_size: usize,
-}
-impl fmt::Display for NodeEntrySizeMismatchError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Node entry size mismatch: {} != {}",
-            self.size, self.expected_size
-        )
-    }
-}
-impl Error for NodeEntrySizeMismatchError {}
-
-#[derive(Debug, Clone)]
-struct EmptyPathError {}
-impl fmt::Display for EmptyPathError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Empty path")
-    }
-}
-impl Error for EmptyPathError {}
-
-#[derive(Debug, Clone)]
-struct PathPrefixNotFoundError {
-    path: Vec<u8>,
-}
-impl fmt::Display for PathPrefixNotFoundError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Path prefix not found: {:?}", self.path)
-    }
-}
-impl Error for PathPrefixNotFoundError {}
 
 // find the index at which a subslice exists within a slice
 fn find_index_of_array(slice: &[u8], subslice: &[u8]) -> Option<usize> {
@@ -220,9 +164,10 @@ impl Node {
         }
 
         match self.forks.get_mut(&path[0]) {
-            None => Err(Box::new(NoForkForNodeError {
-                cac: self.ref_.to_vec(),
-            }) as Box<dyn Error + Send>),
+            None => Err(
+                Box::new(MantarayNodeError::NoForkForNode(hex::encode(&self.ref_)))
+                    as Box<dyn Error + Send>,
+            ),
             Some(f) => {
                 // get the common prefix of the fork and the path
                 let c = common(&f.prefix, path);
@@ -231,9 +176,10 @@ impl Node {
                 if c.len() == f.prefix.len() {
                     f.node.lookup_node(&path[c.len()..], l).await
                 } else {
-                    Err(Box::new(NoForkForNodeError {
-                        cac: self.ref_.to_vec(),
-                    }))
+                    Err(
+                        Box::new(MantarayNodeError::NoForkForNode(hex::encode(&self.ref_)))
+                            as Box<dyn Error + Send>,
+                    )
                 }
             }
         }
@@ -244,9 +190,10 @@ impl Node {
         let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
-            return Err(Box::new(NoEntryForNodeError {
-                cac: node.ref_.to_vec(),
-            }));
+            return Err(
+                Box::new(MantarayNodeError::NoEntryForNode(hex::encode(&node.ref_)))
+                    as Box<dyn Error + Send>,
+            );
         }
 
         Ok(node.entry.as_slice())
@@ -263,20 +210,20 @@ impl Node {
     ) -> Result<()> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
-                return Err(Box::new(NodeEntryTooLargeError {
-                    size: entry.len(),
-                    max_size: 256,
-                }) as Box<dyn Error + Send>);
+                return Err(
+                    Box::new(MantarayNodeError::NodeEntryTooLarge(entry.len(), 256))
+                        as Box<dyn Error + Send>,
+                );
             }
             // empty entry for directories
             if !entry.is_empty() {
                 self.ref_bytes_size = entry.len() as u32;
             }
         } else if !entry.is_empty() && entry.len() != self.ref_bytes_size as usize {
-            return Err(Box::new(NodeEntrySizeMismatchError {
-                size: entry.len(),
-                expected_size: self.ref_bytes_size as usize,
-            }) as Box<dyn Error + Send>);
+            return Err(Box::new(MantarayNodeError::NodeEntrySizeMismatch(
+                entry.len(),
+                self.ref_bytes_size as usize,
+            )) as Box<dyn Error + Send>);
         }
 
         // if path is empty then set entry and return
@@ -434,7 +381,7 @@ impl Node {
     pub async fn remove(&mut self, path: &[u8], ls: &Option<DynLoaderSaver>) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
-            return Err(Box::new(EmptyPathError {}) as Box<dyn Error + Send>);
+            return Err(Box::new(MantarayNodeError::EmptyPath) as Box<dyn Error + Send>);
         }
 
         // if forks is empty then load
@@ -445,17 +392,17 @@ impl Node {
         // if path is not empty then get the fork at the first character of the path
         let f = self.forks.get_mut(&path[0]);
         if f.is_none() {
-            return Err(Box::new(PathPrefixNotFoundError {
-                path: vec![path[0]],
-            }) as Box<dyn Error + Send>);
+            return Err(Box::new(MantarayNodeError::PathPrefixNotFound(
+                String::from_utf8(vec![path[0]]).unwrap(),
+            )) as Box<dyn Error + Send>);
         }
 
         // returns the index of the first instance of sep in s, or -1 if sep is not present in s.
         let prefix_index = find_index_of_array(path, &f.as_ref().unwrap().prefix);
         if prefix_index.is_none() {
-            return Err(Box::new(PathPrefixNotFoundError {
-                path: path.to_vec(),
-            }));
+            return Err(Box::new(MantarayNodeError::PathPrefixNotFound(
+                String::from_utf8(path.to_vec()).unwrap(),
+            )) as Box<dyn Error + Send>);
         }
 
         let rest = &path[f.as_ref().unwrap().prefix.len()..];

@@ -1,7 +1,6 @@
-use std::error::Error;
-
 use const_format::concatcp;
 use rand::RngCore;
+use thiserror::Error;
 
 use crate::{
     node::{Fork, Node},
@@ -25,88 +24,27 @@ const VERSION_STRING_02: &str = concatcp!(VERSION_NAME, VERSION_SEPARATOR, VERSI
 // pre-calculated version string, Keccak-256
 const VERSION_HASH_02: &str = "5768b3b6a7db56d21d1abff40d41cebfc83448fed8d7e9b06ec0d3b073f28f7b";
 
-#[derive(Debug, Clone)]
-struct DataLengthTooSmallError;
-impl std::fmt::Display for DataLengthTooSmallError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Data length is less than the header length")
-    }
+#[derive(Error, Debug, Clone)]
+pub enum MantarayMarshalError {
+    // write!(f, "Data length is less than the header length")
+    #[error("Data length is less than the header length")]
+    DataLengthTooSmallError,
+    // "Node fork has insufficient bytes, expected {}, got {} on byte {}",
+    #[error("Node fork has insufficient bytes, expected {0}, got {1} on byte {2}")]
+    NodeForkInsufficientBytesError(usize, usize, usize),
+    // write!(f, "Invalid version hash")
+    #[error("Invalid version hash")]
+    InvalidVersionHashError,
+    // "Reference length is too long, expected {}, got {}",
+    #[error("Reference length is too long, expected {0}, got {1}")]
+    RefLengthTooLongError(usize, usize),
+    // "Metadata size is too large, expected {}, got {}",
+    #[error("Metadata size is too large, maximum {0}, got {1}")]
+    MetadataSizeTooLargeError(usize, usize),
+    // "Prefix length is invalid, expected {}, got {}",
+    #[error("Prefix length is invalid, expected {0}, got {1}")]
+    InvalidPrefixLengthError(usize, usize),
 }
-impl Error for DataLengthTooSmallError {}
-
-#[derive(Debug, Clone)]
-struct NodeForkInsufficientBytesError {
-    expected: usize,
-    actual: usize,
-    on_byte: usize,
-}
-impl std::fmt::Display for NodeForkInsufficientBytesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Node fork has insufficient bytes, expected {}, got {} on byte {}",
-            self.expected, self.actual, self.on_byte
-        )
-    }
-}
-impl Error for NodeForkInsufficientBytesError {}
-
-#[derive(Debug, Clone)]
-struct InvalidVersionHashError;
-impl std::fmt::Display for InvalidVersionHashError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Invalid version hash")
-    }
-}
-impl Error for InvalidVersionHashError {}
-
-#[derive(Debug, Clone)]
-struct RefLengthTooLongError {
-    expected: usize,
-    actual: usize,
-}
-impl std::fmt::Display for RefLengthTooLongError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Reference length is too long, expected {}, got {}",
-            self.expected, self.actual
-        )
-    }
-}
-impl Error for RefLengthTooLongError {}
-
-#[derive(Debug, Clone)]
-struct MetadataSizeTooLargeError {
-    expected: usize,
-    actual: usize,
-}
-impl std::fmt::Display for MetadataSizeTooLargeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Metadata size is too large, expected {}, got {}",
-            self.expected, self.actual
-        )
-    }
-}
-impl Error for MetadataSizeTooLargeError {}
-
-#[derive(Debug, Clone)]
-struct InvalidPrefixLengthError {
-    expected: usize,
-    actual: usize,
-}
-impl std::fmt::Display for InvalidPrefixLengthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Prefix length is invalid, expected {}, got {}",
-            self.expected, self.actual
-        )
-    }
-}
-impl Error for InvalidPrefixLengthError {}
 
 pub trait Marshal {
     type Item;
@@ -199,7 +137,7 @@ impl Marshal for Node {
     fn unmarshal_binary(&mut self, data: &mut [u8]) -> Result<()> {
         // if the data length is less than the header length, return invalid input
         if data.len() < NODE_HEADER_SIZE {
-            return Err(Box::new(DataLengthTooSmallError {}));
+            return Err(Box::new(MantarayMarshalError::DataLengthTooSmallError));
         }
 
         // get the obfuscation key from the data vector and copy it to the node
@@ -238,13 +176,13 @@ impl Marshal for Node {
 
                     if data.len() < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize
                     {
-                        return Err(Box::new(NodeForkInsufficientBytesError {
-                            expected: offset
-                                + NODE_FORK_PRE_REFERENCE_SIZE
-                                + ref_bytes_size as usize,
-                            actual: data.len(),
-                            on_byte: b as usize,
-                        }));
+                        return Err(Box::new(
+                            MantarayMarshalError::NodeForkInsufficientBytesError(
+                                offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize,
+                                data.len(),
+                                b as usize,
+                            ),
+                        ));
                     }
 
                     // get the data to be unmarshaled from the data vector
@@ -290,11 +228,13 @@ impl Marshal for Node {
                     let mut f = Fork::default();
 
                     if data.len() < offset + NODE_FORK_TYPE_BYTES_SIZE {
-                        return Err(Box::new(NodeForkInsufficientBytesError {
-                            expected: offset + NODE_FORK_TYPE_BYTES_SIZE,
-                            actual: data.len(),
-                            on_byte: b as usize,
-                        }));
+                        return Err(Box::new(
+                            MantarayMarshalError::NodeForkInsufficientBytesError(
+                                offset + NODE_FORK_TYPE_BYTES_SIZE,
+                                data.len(),
+                                b as usize,
+                            ),
+                        ));
                     }
 
                     // get the node type from the data vector
@@ -310,14 +250,16 @@ impl Marshal for Node {
                                 + ref_bytes_size as usize
                                 + NODE_FORK_METADATA_BYTES_SIZE
                         {
-                            return Err(Box::new(NodeForkInsufficientBytesError {
-                                expected: offset
-                                    + NODE_FORK_PRE_REFERENCE_SIZE
-                                    + ref_bytes_size as usize
-                                    + NODE_FORK_METADATA_BYTES_SIZE,
-                                actual: data.len(),
-                                on_byte: b as usize,
-                            }));
+                            return Err(Box::new(
+                                MantarayMarshalError::NodeForkInsufficientBytesError(
+                                    offset
+                                        + NODE_FORK_PRE_REFERENCE_SIZE
+                                        + ref_bytes_size as usize
+                                        + NODE_FORK_METADATA_BYTES_SIZE,
+                                    data.len(),
+                                    b as usize,
+                                ),
+                            ));
                         }
 
                         // get the metadata bytes size from the data vector from bigendian u16 format
@@ -342,13 +284,13 @@ impl Marshal for Node {
                         if data.len()
                             < offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize
                         {
-                            return Err(Box::new(NodeForkInsufficientBytesError {
-                                expected: offset
-                                    + NODE_FORK_PRE_REFERENCE_SIZE
-                                    + ref_bytes_size as usize,
-                                actual: data.len(),
-                                on_byte: b as usize,
-                            }));
+                            return Err(Box::new(
+                                MantarayMarshalError::NodeForkInsufficientBytesError(
+                                    offset + NODE_FORK_PRE_REFERENCE_SIZE + ref_bytes_size as usize,
+                                    data.len(),
+                                    b as usize,
+                                ),
+                            ));
                         }
 
                         // unmarshall the fork
@@ -365,7 +307,7 @@ impl Marshal for Node {
             Ok(())
         } else {
             // return invalid input
-            Err(Box::new(InvalidVersionHashError {}))
+            Err(Box::new(MantarayMarshalError::InvalidVersionHashError))
         }
     }
 }
@@ -377,10 +319,10 @@ impl Marshal for Fork {
         // check the length of the ref_ vector
         if r.len() > 256 {
             // create the error and return as Box<dyn Error + Send>
-            return Err(Box::new(RefLengthTooLongError {
-                expected: 256,
-                actual: r.len(),
-            }));
+            return Err(Box::new(MantarayMarshalError::RefLengthTooLongError(
+                256,
+                r.len(),
+            )));
         }
 
         // create a vector to store the marshaled fork
@@ -425,10 +367,10 @@ impl Marshal for Fork {
 
             // make sure the metadata size is less than the u16 size
             if metadata_bytes_size > u16::MAX as usize {
-                return Err(Box::new(MetadataSizeTooLargeError {
-                    expected: u16::MAX as usize,
-                    actual: metadata_bytes_size,
-                }));
+                return Err(Box::new(MantarayMarshalError::MetadataSizeTooLargeError(
+                    u16::MAX as usize,
+                    metadata_bytes_size,
+                )));
             }
 
             // convert metadata_bytes_size to u16
@@ -451,10 +393,10 @@ impl Marshal for Fork {
 
         // if prefix length is invalid, return error
         if prefix_length as usize == 0 || prefix_length as usize > NODE_PREFIX_MAX_SIZE {
-            return Err(Box::new(InvalidPrefixLengthError {
-                expected: NODE_PREFIX_MAX_SIZE,
-                actual: prefix_length as usize,
-            }));
+            return Err(Box::new(MantarayMarshalError::InvalidPrefixLengthError(
+                NODE_PREFIX_MAX_SIZE,
+                prefix_length as usize,
+            )));
         }
 
         // set fork prefix
@@ -485,10 +427,10 @@ impl MarshalV2 for Fork {
 
         // if prefix length is invalid, return error
         if prefix_length as usize == 0 || prefix_length as usize > NODE_PREFIX_MAX_SIZE {
-            return Err(Box::new(InvalidPrefixLengthError {
-                expected: NODE_PREFIX_MAX_SIZE,
-                actual: prefix_length as usize,
-            }));
+            return Err(Box::new(MantarayMarshalError::InvalidPrefixLengthError(
+                NODE_PREFIX_MAX_SIZE,
+                prefix_length as usize,
+            )));
         }
 
         // set fork prefix
