@@ -66,21 +66,16 @@ impl Manifest {
     pub fn new_manifest_reference(reference: Reference, ls: DynLoaderSaver) -> Result<Manifest> {
         let mm = Manifest {
             ls: Some(ls),
-            trie: Node::new_node_ref(reference),
+            trie: Node::new_node_ref(&reference),
         };
 
         Ok(mm)
     }
 
     // add a path and entry to the manifest.
-    pub async fn add(&mut self, path: &str, entry: &Entry<'_>) -> Result<()> {
+    pub async fn add(&mut self, path: &str, entry: Entry) -> Result<()> {
         self.trie
-            .add(
-                path.as_bytes(),
-                entry.reference,
-                entry.metadata.clone(),
-                &self.ls,
-            )
+            .add(path.as_bytes(), &entry.reference, entry.metadata, &self.ls)
             .await
     }
 
@@ -102,7 +97,7 @@ impl Manifest {
         let metadata = n.metadata.clone();
 
         Ok(Entry {
-            reference: &n.ref_,
+            reference: n.ref_.clone(),
             metadata,
         })
     }
@@ -113,15 +108,6 @@ impl Manifest {
     }
 
     pub async fn set_root(&mut self, metadata: HashMap<String, String>) -> Result<()> {
-        // const rootMeta = { "website-index-document": index }
-        // node.addFork(new TextEncoder().encode('/'), hexToBytes(zeroAddress), rootMeta)
-
-        // const rootFork = node.getForkAtPath(new TextEncoder().encode('/'))
-        // const rootNode = rootFork.node
-        // let type = rootNode.getType
-        // type |= NodeType.value
-        // type = (NodeType.mask ^ NodeType.withPathSeparator) & type
-        // rootNode.setType = type
         self.trie
             .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &self.ls)
             .await?;
@@ -141,12 +127,12 @@ impl Manifest {
 }
 
 // define a trait that represents a single manifest entry.
-pub struct Entry<'a> {
-    pub reference: Reference<'a>,
+pub struct Entry {
+    pub reference: Reference,
     pub metadata: HashMap<String, String>,
 }
 
-type Reference<'a> = &'a [u8];
+type Reference = Vec<u8>;
 
 pub fn keccak256<S>(bytes: S) -> [u8; 32]
 where
