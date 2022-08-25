@@ -8,6 +8,7 @@ use tiny_keccak::{Hasher, Keccak};
 pub mod marshal;
 pub mod node;
 pub mod persist;
+pub mod stringer;
 
 const PATH_SEPARATOR: &str = "/";
 
@@ -33,7 +34,7 @@ const NT_WITH_PATH_SEPARATOR: u8 = 8;
 const NT_WITH_METADATA: u8 = 16;
 const NT_MASK: u8 = 255;
 
-pub type Result<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send>>;
 
 #[derive(Error, Debug, Clone)]
 pub enum MantarayError {
@@ -97,7 +98,7 @@ impl Manifest {
         let metadata = n.metadata.clone();
 
         Ok(Entry {
-            reference: n.ref_.clone(),
+            reference: n.entry.clone(),
             metadata,
         })
     }
@@ -119,8 +120,10 @@ impl Manifest {
         Ok(())
     }
 
-    pub async fn save(&mut self) -> Result<()> {
-        self.trie.save(&Box::new(&self.ls)).await
+    pub async fn store(&mut self) -> Result<Vec<u8>> {
+        self.trie.save(&Box::new(&self.ls)).await?;
+
+        Ok(self.trie.ref_.clone())
     }
 
     // todo!{"Finish manifest implementation"}

@@ -51,8 +51,7 @@ impl Node {
         }
 
         // load the node from the storage backend
-        let ref_ = self.ref_.clone();
-        let mut data = l.as_ref().unwrap().load(&ref_).await?;
+        let mut data = l.as_ref().unwrap().load(&self.ref_).await?;
 
         // unmarshall the node from dta into self
         self.unmarshal_binary(&mut data)?;

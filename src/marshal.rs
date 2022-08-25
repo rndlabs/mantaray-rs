@@ -110,8 +110,8 @@ impl Marshal for Node {
         let mut index = BitField::new();
 
         // iterate over the forks and set the index bitfield
-        for fork in &self.forks {
-            index.set(*fork.0);
+        for fork in self.forks.keys() {
+            index.set(*fork);
         }
 
         // append the index to the data vector

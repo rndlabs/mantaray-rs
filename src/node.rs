@@ -246,6 +246,7 @@ impl Node {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
             self.load(ls).await?;
+            self.ref_ = vec![];
         }
 
         // try get the fork at the first character of the path
