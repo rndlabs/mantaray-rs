@@ -1,5 +1,6 @@
 use crate::persist::DynLoaderSaver;
-use std::{collections::HashMap, error::Error};
+use std::collections::{BTreeMap,HashMap};
+use std::error::Error;
 
 use async_recursion::async_recursion;
 use serde::*;
@@ -24,7 +25,7 @@ pub struct Node {
     pub ref_: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub entry: Vec<u8>,
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
     pub forks: HashMap<u8, Fork>,
 }
 
@@ -205,7 +206,7 @@ impl Node {
         &mut self,
         path: &[u8],
         entry: &[u8],
-        metadata: HashMap<String, String>,
+        metadata: BTreeMap<String, String>,
         ls: &Option<DynLoaderSaver>,
     ) -> Result<()> {
         if self.ref_bytes_size == 0 {
@@ -471,7 +472,7 @@ mod tests {
     #[derive(Default, Clone)]
     struct RemoveTestCaseItem {
         path: String,
-        metadata: HashMap<String, String>,
+        metadata: BTreeMap<String, String>,
     }
 
     #[derive(Default, Clone)]
@@ -647,7 +648,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -686,7 +687,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
                     .await
                     .unwrap(),
                 ()
@@ -724,7 +725,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, HashMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
                     .await
                     .unwrap(),
                 ()

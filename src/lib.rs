@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error};
+use std::collections::BTreeMap;
 
 use node::Node;
 use persist::DynLoaderSaver;
@@ -107,7 +107,7 @@ impl Manifest {
         self.trie.has_prefix(prefix.as_bytes(), &self.ls).await
     }
 
-    pub async fn set_root(&mut self, metadata: HashMap<String, String>) -> Result<()> {
+    pub async fn set_root(&mut self, metadata: BTreeMap<String, String>) -> Result<()> {
         self.trie
             .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &self.ls)
             .await?;
@@ -129,7 +129,7 @@ impl Manifest {
 // define a trait that represents a single manifest entry.
 pub struct Entry {
     pub reference: Reference,
-    pub metadata: HashMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 type Reference = Vec<u8>;

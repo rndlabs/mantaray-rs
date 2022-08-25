@@ -508,7 +508,7 @@ fn encrypt_decrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
 
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     use crate::keccak256;
 
@@ -520,7 +520,7 @@ mod tests {
     #[derive(Clone, Default)]
     struct MarshallNodeEntry {
         path: String,
-        metadata: HashMap<String, String>,
+        metadata: BTreeMap<String, String>,
     }
 
     fn test_entries() -> [MarshallNodeEntry; 5] {
