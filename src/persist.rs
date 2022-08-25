@@ -255,3 +255,55 @@ impl LoaderSaver for BeeLoadSaver {
         }
     }
 }
+
+
+// tests
+#[cfg(test)]
+mod tests {
+    use crate::{Manifest, Entry};
+
+    use super::*;
+
+    use std::{sync::Arc, collections::BTreeMap};
+    use tokio::sync::Mutex;
+
+    #[tokio::test]
+    async fn persist_idempotence() {
+        let ls = Arc::new(Mutex::new(MockLoadSaver::new()));
+
+        let mut n = Manifest::new(Box::new(ls), false);
+
+        // declare a vector of byte strings
+        let paths = vec![
+            "aa",
+            "b",
+            "aaaaaa",
+            "aaaaab",
+            "abbbb",
+            "abbba",
+            "bbbbba",
+            "bbbaaa",
+            "bbbaab",
+        ];
+
+        for path in &paths {
+            let c = path;
+            n.store().await.unwrap();
+            // create a variable v that is a clone of the byte string c padded to 32 bytes
+            let mut v = c.as_bytes().to_vec();
+            v.resize(32, 0);
+            n.add(path, Entry { reference: v.clone(), metadata: BTreeMap::new() }).await.unwrap();
+        }
+
+        n.store().await.unwrap();
+
+        for path in &paths {
+            let c = path;
+            let entry = n.lookup(c).await.unwrap();
+            let mut v = c.as_bytes().to_vec();
+            println!("{:?}", entry.reference);
+            v.resize(32, 0);
+            assert_eq!(entry.reference, v);
+        }
+    }
+}
