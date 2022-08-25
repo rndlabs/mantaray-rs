@@ -49,7 +49,7 @@ impl Node {
             buf.push_str(" PathSeparator");
         }
         buf.push_str(" ]");
-        buf.push_str("\n");
+        buf.push('\n');
         buf.push_str(prefix);
         if !n.forks.is_empty() || !n.metadata.is_empty() {
             buf.push_str(LEFT_MID);
@@ -64,7 +64,9 @@ impl Node {
             } else {
                 buf.push_str(BOTTOM_LEFT);
             }
-            buf.push_str(format!("m: '{}'\n", serde_json::to_string(&n.metadata).unwrap()).as_str());
+            buf.push_str(
+                format!("m: '{}'\n", serde_json::to_string(&n.metadata).unwrap()).as_str(),
+            );
         }
 
         // get the keys of the forks and sort them.
@@ -92,10 +94,10 @@ impl Node {
                 // add MIDDLE to the new prefix
                 new_prefix.push_str(MIDDLE);
             } else {
-                new_prefix.push_str(" ");
+                new_prefix.push(' ');
             }
             new_prefix.push_str("     ");
-            Node::to_string_with_prefix(&f.node, &new_prefix, &mut buf);
+            Node::to_string_with_prefix(&f.node, &new_prefix, buf);
         }
     }
 }

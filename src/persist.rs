@@ -255,15 +255,14 @@ impl LoaderSaver for BeeLoadSaver {
     }
 }
 
-
 // tests
 #[cfg(test)]
 mod tests {
-    use crate::{Manifest, Entry};
+    use crate::{Entry, Manifest};
 
     use super::*;
 
-    use std::{sync::Arc, collections::BTreeMap};
+    use std::{collections::BTreeMap, sync::Arc};
     use tokio::sync::Mutex;
 
     #[tokio::test]
@@ -274,15 +273,7 @@ mod tests {
 
         // declare a vector of byte strings
         let paths = vec![
-            "aa",
-            "b",
-            "aaaaaa",
-            "aaaaab",
-            "abbbb",
-            "abbba",
-            "bbbbba",
-            "bbbaaa",
-            "bbbaab",
+            "aa", "b", "aaaaaa", "aaaaab", "abbbb", "abbba", "bbbbba", "bbbaaa", "bbbaab",
         ];
 
         for path in &paths {
@@ -291,7 +282,15 @@ mod tests {
             // create a variable v that is a clone of the byte string c padded to 32 bytes
             let mut v = c.as_bytes().to_vec();
             v.resize(32, 0);
-            n.add(path, Entry { reference: v.clone(), metadata: BTreeMap::new() }).await.unwrap();
+            n.add(
+                path,
+                Entry {
+                    reference: v.clone(),
+                    metadata: BTreeMap::new(),
+                },
+            )
+            .await
+            .unwrap();
         }
 
         n.store().await.unwrap();
