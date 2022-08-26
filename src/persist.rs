@@ -2,6 +2,7 @@ use crate::Result;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use bee_api::BeeConfig;
+use lru::LruCache;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -21,7 +22,7 @@ pub type DynLoaderSaver = Box<dyn LoaderSaver + Send + Sync>;
 // loader defines a trait that retrieves nodes by reference from a storage backend.
 #[async_trait]
 pub trait Loader {
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>>;
 }
 
 // saver defines a trait that stores nodes by reference to a storage backend.
@@ -32,14 +33,14 @@ pub trait Saver {
 
 #[async_trait]
 pub trait LoaderSaver: Debug + Sync {
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>>;
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>>;
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>>;
     async fn as_dyn(&self) -> &dyn LoaderSaver;
 }
 
 impl Node {
     // a load function for nodes
-    pub async fn load(&mut self, l: &Option<DynLoaderSaver>) -> Result<()> {
+    pub async fn load(&mut self, l: &mut Option<DynLoaderSaver>) -> Result<()> {
         // if ref_ is not a reference, return Ok
         if self.ref_.is_empty() {
             return Ok(());
@@ -51,7 +52,11 @@ impl Node {
         }
 
         // load the node from the storage backend
-        let mut data = l.as_ref().unwrap().load(&self.ref_).await?;
+        let ref_ = self.ref_.clone();
+        let mut t = l.as_mut().unwrap();
+        let mut data = t.load(&ref_).await?;
+        // let t = l.as_mut().unwrap().load(&self.ref_).await?;
+        // let mut data = l.as_ref().unwrap().load(&ref_).await?;
 
         // unmarshall the node from dta into self
         self.unmarshal_binary(&mut data)?;
@@ -111,7 +116,7 @@ impl LoaderSaver for MockLoadSaver {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
         let store = self.store.lock().await;
         let data = store.get(ref_).unwrap();
         Ok(data.clone())
@@ -125,11 +130,12 @@ impl LoaderSaver for MockLoadSaver {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BeeLoadSaver {
     pub uri: String,
     pub config: BeeConfig,
     pub client: reqwest::Client,
+    pub cache: Arc<Mutex<LruCache<Vec<u8>, Vec<u8>>>>,
 }
 
 impl BeeLoadSaver {
@@ -138,24 +144,25 @@ impl BeeLoadSaver {
             uri,
             config,
             client: reqwest::Client::new(),
+            cache: Arc::new(Mutex::new(LruCache::new(10000))),
         }
     }
 }
 
-#[async_trait]
-impl LoaderSaver for Box<dyn LoaderSaver + Send> {
-    async fn as_dyn(&self) -> &dyn LoaderSaver {
-        self.as_ref()
-    }
+// #[async_trait]
+// impl LoaderSaver for Box<dyn LoaderSaver + Send> {
+//     async fn as_dyn(&self) -> &dyn LoaderSaver {
+//         self.as_ref()
+//     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
-        self.as_ref().load(ref_).await
-    }
+//     async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
+//         self.as_ref().load(ref_).await
+//     }
 
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
-        self.as_ref().save(data).await
-    }
-}
+//     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
+//         self.as_ref().save(data).await
+//     }
+// }
 
 #[async_trait]
 impl LoaderSaver for Arc<BeeLoadSaver> {
@@ -163,12 +170,16 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
         self.as_ref()
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
-        Ok(
-            bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
+        let mut cache = self.cache.lock().await;
+        let cache = cache.get(ref_);
+        if cache.is_some() {
+            return Ok(cache.unwrap().clone());
+        } else {
+            Ok(bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
                 .await?
-                .0,
-        )
+                .0)
+        }
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
@@ -197,7 +208,7 @@ impl LoaderSaver for Mutex<MockLoadSaver> {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
         self.lock().await.load(ref_).await
     }
 
@@ -212,7 +223,7 @@ impl LoaderSaver for Arc<Mutex<MockLoadSaver>> {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
         self.lock().await.load(ref_).await
     }
 
@@ -227,7 +238,7 @@ impl LoaderSaver for BeeLoadSaver {
         self
     }
 
-    async fn load(&self, ref_: &[u8]) -> Result<Vec<u8>> {
+    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
         Ok(
             bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
                 .await?

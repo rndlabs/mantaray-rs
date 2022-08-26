@@ -152,11 +152,11 @@ impl Node {
     pub async fn lookup_node(
         &mut self,
         path: &[u8],
-        l: &Option<DynLoaderSaver>,
+        mut l: &mut Option<DynLoaderSaver>,
     ) -> Result<&mut Node> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(l).await?;
+            self.load(&mut l).await?;
         }
 
         // if the path is empty return the current node
@@ -187,7 +187,7 @@ impl Node {
     }
 
     // lookup finds the entry for a path or returns error if not found
-    pub async fn lookup(&mut self, path: &[u8], l: &Option<DynLoaderSaver>) -> Result<&[u8]> {
+    pub async fn lookup(&mut self, path: &[u8], l: &mut Option<DynLoaderSaver>) -> Result<&[u8]> {
         let node = self.lookup_node(path, l).await?;
         // if node is not value type and path lengther is greater than 0 return error
         if !node.is_value_type() && !path.is_empty() {
@@ -207,7 +207,7 @@ impl Node {
         path: &[u8],
         entry: &[u8],
         metadata: BTreeMap<String, String>,
-        ls: &Option<DynLoaderSaver>,
+        mut ls: &mut Option<DynLoaderSaver>,
     ) -> Result<()> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
@@ -245,7 +245,7 @@ impl Node {
 
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(ls).await?;
+            self.load(&mut ls).await?;
             self.ref_ = vec![];
         }
 
@@ -380,7 +380,7 @@ impl Node {
 
     // remove removes a path from the node
     #[async_recursion]
-    pub async fn remove(&mut self, path: &[u8], ls: &Option<DynLoaderSaver>) -> Result<()> {
+    pub async fn remove(&mut self, path: &[u8], mut ls: &mut Option<DynLoaderSaver>) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
             return Err(Box::new(MantarayNodeError::EmptyPath) as Box<dyn Error + Send>);
@@ -388,7 +388,7 @@ impl Node {
 
         // if forks is empty then load
         if self.forks.is_empty() {
-            self.load(ls).await?;
+            self.load(&mut ls).await?;
         }
 
         // if path is not empty then get the fork at the first character of the path
@@ -420,7 +420,7 @@ impl Node {
 
     // hasprefix tests whether the node contains prefix path
     #[async_recursion]
-    pub async fn has_prefix(&mut self, path: &[u8], l: &Option<DynLoaderSaver>) -> Result<bool> {
+    pub async fn has_prefix(&mut self, path: &[u8], l: &mut Option<DynLoaderSaver>) -> Result<bool> {
         // if path is empty then return false
         if path.is_empty() {
             return Ok(true);
@@ -494,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn nil_path() {
         let mut n = Node::default();
-        assert_eq!(n.lookup("".as_bytes(), &None).await.is_ok(), true);
+        assert_eq!(n.lookup("".as_bytes(), &mut None).await.is_ok(), true);
     }
 
     // test data
@@ -649,7 +649,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &mut None)
                     .await
                     .unwrap(),
                 ()
@@ -657,8 +657,7 @@ mod tests {
 
             for j in 0..i {
                 let d = test_case_data()[0].items[j].as_bytes();
-                let m = n.lookup(d, &None);
-                let r = m.await;
+                let r = n.lookup(d, &mut None).await;
                 assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
@@ -688,7 +687,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &mut None)
                     .await
                     .unwrap(),
                 ()
@@ -696,7 +695,7 @@ mod tests {
 
             for j in 0..i {
                 let d = tc[j];
-                let node = n.lookup_node(d.as_bytes(), &None).await.unwrap();
+                let node = n.lookup_node(d.as_bytes(), &mut None).await.unwrap();
                 assert_eq!(node.is_value_type(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
@@ -726,7 +725,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, BTreeMap::new(), &None)
+                n.add(c.as_bytes(), &e, BTreeMap::new(), &mut None)
                     .await
                     .unwrap(),
                 ()
@@ -742,7 +741,7 @@ mod tests {
 
         for d in tc {
             let node = n2
-                .lookup_node(d.as_bytes(), &Some(Box::new(ls.clone())))
+                .lookup_node(d.as_bytes(), &mut Some(Box::new(ls.clone())))
                 .await
                 .unwrap();
             assert_eq!(node.is_value_type(), true);
@@ -768,7 +767,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.path.as_bytes(), &e, c.metadata.clone(), &None)
+                n.add(c.path.as_bytes(), &e, c.metadata.clone(), &mut None)
                     .await
                     .unwrap(),
                 ()
@@ -776,8 +775,7 @@ mod tests {
 
             for j in 0..i {
                 let d = &tc.items[j].path;
-                let m = n.lookup(d.as_bytes(), &None);
-                let r = m.await;
+                let r = n.lookup(d.as_bytes(), &mut None).await;
                 assert_eq!(r.is_ok(), true);
                 let de = vec![0; 32 - d.len()]
                     .iter()
@@ -790,10 +788,9 @@ mod tests {
 
         for c in tc.remove.iter() {
             // create a vector from the string c zero padded to the left to 32 bytes
-            assert_eq!(n.remove(c.as_bytes(), &None).await.unwrap(), ());
+            assert_eq!(n.remove(c.as_bytes(), &mut None).await.unwrap(), ());
 
-            let lookup = n.lookup(c.as_bytes(), &None);
-            assert_eq!(lookup.await.is_err(), true);
+            assert_eq!(n.lookup(c.as_bytes(), &mut None).await.is_err(), true);
         }
     }
 
@@ -811,7 +808,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<u8>>();
             assert_eq!(
-                n.add(c.as_bytes(), &e, Default::default(), &None)
+                n.add(c.as_bytes(), &e, Default::default(), &mut None)
                     .await
                     .unwrap(),
                 ()
@@ -819,8 +816,7 @@ mod tests {
         }
 
         for (i, test_prefix) in tc.test_paths.iter().enumerate() {
-            let has_prefix = n.has_prefix(test_prefix.as_bytes(), &None);
-            assert_eq!(has_prefix.await.unwrap(), tc.should_exist[i]);
+            assert_eq!(n.has_prefix(test_prefix.as_bytes(), &mut None).await.unwrap(), tc.should_exist[i]);
         }
     }
 }

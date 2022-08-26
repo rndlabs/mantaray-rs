@@ -76,18 +76,18 @@ impl Manifest {
     // add a path and entry to the manifest.
     pub async fn add(&mut self, path: &str, entry: Entry) -> Result<()> {
         self.trie
-            .add(path.as_bytes(), &entry.reference, entry.metadata, &self.ls)
+            .add(path.as_bytes(), &entry.reference, entry.metadata, &mut self.ls)
             .await
     }
 
     // remove a path from the manifest.
     pub async fn remove(&mut self, path: &str) -> Result<()> {
-        self.trie.remove(path.as_bytes(), &self.ls).await
+        self.trie.remove(path.as_bytes(), &mut self.ls).await
     }
 
     // lookup a path in the manifest.
     pub async fn lookup(&mut self, path: &str) -> Result<Entry> {
-        let n = self.trie.lookup_node(path.as_bytes(), &self.ls).await?;
+        let n = self.trie.lookup_node(path.as_bytes(), &mut self.ls).await?;
 
         // if the node is not a value type, return not found.
         if !n.is_value_type() {
@@ -105,14 +105,14 @@ impl Manifest {
 
     // determine if the manifest has a specified prefix.
     pub async fn has_prefix(&mut self, prefix: &str) -> Result<bool> {
-        self.trie.has_prefix(prefix.as_bytes(), &self.ls).await
+        self.trie.has_prefix(prefix.as_bytes(), &mut self.ls).await
     }
 
     pub async fn set_root(&mut self, metadata: BTreeMap<String, String>) -> Result<()> {
         self.trie
-            .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &self.ls)
+            .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &mut self.ls)
             .await?;
-        let mut root_node = self.trie.lookup_node("/".as_bytes(), &self.ls).await?;
+        let mut root_node = self.trie.lookup_node("/".as_bytes(), &mut self.ls).await?;
         let mut type_ = root_node.node_type;
         type_ |= NT_VALUE;
         type_ &= NT_MASK ^ NT_WITH_PATH_SEPARATOR;

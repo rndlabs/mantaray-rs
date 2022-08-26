@@ -31,7 +31,7 @@ impl Node {
         buf
     }
 
-    pub fn to_string_with_prefix(n: &Node, prefix: &str, mut buf: &mut String) {
+    pub fn to_string_with_prefix(n: &Node, prefix: &str, buf: &mut String) {
         buf.push_str(prefix);
         buf.push_str(LEFT_MID);
         buf.push_str(format!("r: '{}'\n", hex::encode(n.ref_.clone())).as_str());

@@ -20,6 +20,7 @@ tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 async-trait = "0.1.57"
 bee_api = { path = "../bee_api" }
 thiserror = "1.0.32"
+lru = "0.7.8"
 
 [dev-dependencies]
 test-case = "2.2.1"
