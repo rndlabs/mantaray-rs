@@ -152,11 +152,11 @@ impl Node {
     pub async fn lookup_node(
         &mut self,
         path: &[u8],
-        mut l: &mut Option<DynLoaderSaver>,
+        l: &mut Option<DynLoaderSaver>,
     ) -> Result<&mut Node> {
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(&mut l).await?;
+            self.load(l).await?;
         }
 
         // if the path is empty return the current node
@@ -207,7 +207,7 @@ impl Node {
         path: &[u8],
         entry: &[u8],
         metadata: BTreeMap<String, String>,
-        mut ls: &mut Option<DynLoaderSaver>,
+        ls: &mut Option<DynLoaderSaver>,
     ) -> Result<()> {
         if self.ref_bytes_size == 0 {
             if entry.len() > 256 {
@@ -245,7 +245,7 @@ impl Node {
 
         // if forks hashmap is empty, perhaps we haven't loaded the forks yet
         if self.forks.is_empty() {
-            self.load(&mut ls).await?;
+            self.load(ls).await?;
             self.ref_ = vec![];
         }
 
@@ -380,7 +380,7 @@ impl Node {
 
     // remove removes a path from the node
     #[async_recursion]
-    pub async fn remove(&mut self, path: &[u8], mut ls: &mut Option<DynLoaderSaver>) -> Result<()> {
+    pub async fn remove(&mut self, path: &[u8], ls: &mut Option<DynLoaderSaver>) -> Result<()> {
         // if path is empty then return error
         if path.is_empty() {
             return Err(Box::new(MantarayNodeError::EmptyPath) as Box<dyn Error + Send>);
@@ -388,7 +388,7 @@ impl Node {
 
         // if forks is empty then load
         if self.forks.is_empty() {
-            self.load(&mut ls).await?;
+            self.load(ls).await?;
         }
 
         // if path is not empty then get the fork at the first character of the path
