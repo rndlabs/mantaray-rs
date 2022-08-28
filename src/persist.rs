@@ -167,7 +167,7 @@ impl BeeLoadSaver {
 #[async_trait]
 impl LoaderSaver for Arc<BeeLoadSaver> {
     async fn as_dyn(&self) -> &dyn LoaderSaver {
-        self.as_ref()
+        self
     }
 
     async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
@@ -177,7 +177,7 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
             return Ok(data.clone());
         } else {
             Ok(
-                bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
+                bee_api::bytes_get(&self.client, self.uri.clone(), hex::encode(ref_))
                     .await?
                     .0,
             )
@@ -187,7 +187,7 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
         match hex::decode(
             bee_api::bytes_post(
-                self.client.clone(),
+                &self.client,
                 self.uri.clone(),
                 data.to_vec(),
                 self.config
@@ -231,40 +231,6 @@ impl LoaderSaver for Arc<Mutex<MockLoadSaver>> {
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
         self.lock().await.save(data).await
-    }
-}
-
-#[async_trait]
-impl LoaderSaver for BeeLoadSaver {
-    async fn as_dyn(&self) -> &dyn LoaderSaver {
-        self
-    }
-
-    async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
-        Ok(
-            bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
-                .await?
-                .0,
-        )
-    }
-
-    async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
-        match hex::decode(
-            bee_api::bytes_post(
-                self.client.clone(),
-                self.uri.clone(),
-                data.to_vec(),
-                self.config
-                    .upload
-                    .as_ref()
-                    .expect("UploadConfig not specified"),
-            )
-            .await?
-            .ref_,
-        ) {
-            Ok(ref_) => Ok(ref_),
-            Err(e) => Err(Box::new(e)),
-        }
     }
 }
 
