@@ -123,9 +123,9 @@ impl Node {
         self.node_type |= NT_WITH_METADATA
     }
 
-    // fn make_not_value(&mut self) {
-    //     self.node_type &= NT_MASK ^ NT_VALUE
-    // }
+    pub fn make_not_value(&mut self) {
+        self.node_type &= NT_MASK ^ NT_VALUE
+    }
 
     // fn make_not_edge(&mut self) {
     //     self.node_type &= NT_MASK ^ NT_EDGE
