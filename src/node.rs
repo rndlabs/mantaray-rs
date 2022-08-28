@@ -420,7 +420,11 @@ impl Node {
 
     // hasprefix tests whether the node contains prefix path
     #[async_recursion]
-    pub async fn has_prefix(&mut self, path: &[u8], l: &mut Option<DynLoaderSaver>) -> Result<bool> {
+    pub async fn has_prefix(
+        &mut self,
+        path: &[u8],
+        l: &mut Option<DynLoaderSaver>,
+    ) -> Result<bool> {
         // if path is empty then return false
         if path.is_empty() {
             return Ok(true);
@@ -816,7 +820,12 @@ mod tests {
         }
 
         for (i, test_prefix) in tc.test_paths.iter().enumerate() {
-            assert_eq!(n.has_prefix(test_prefix.as_bytes(), &mut None).await.unwrap(), tc.should_exist[i]);
+            assert_eq!(
+                n.has_prefix(test_prefix.as_bytes(), &mut None)
+                    .await
+                    .unwrap(),
+                tc.should_exist[i]
+            );
         }
     }
 }

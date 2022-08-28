@@ -53,7 +53,7 @@ impl Node {
 
         // load the node from the storage backend
         let ref_ = self.ref_.clone();
-        let mut t = l.as_mut().unwrap();
+        let t = l.as_mut().unwrap();
         let mut data = t.load(&ref_).await?;
         // let t = l.as_mut().unwrap().load(&self.ref_).await?;
         // let mut data = l.as_ref().unwrap().load(&ref_).await?;
@@ -173,12 +173,14 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
     async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
         let mut cache = self.cache.lock().await;
         let cache = cache.get(ref_);
-        if cache.is_some() {
-            return Ok(cache.unwrap().clone());
+        if let Some(data) = cache {
+            return Ok(data.clone());
         } else {
-            Ok(bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
-                .await?
-                .0)
+            Ok(
+                bee_api::bytes_get(self.client.clone(), self.uri.clone(), hex::encode(ref_))
+                    .await?
+                    .0,
+            )
         }
     }
 

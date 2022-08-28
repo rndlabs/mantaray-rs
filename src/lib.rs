@@ -76,7 +76,12 @@ impl Manifest {
     // add a path and entry to the manifest.
     pub async fn add(&mut self, path: &str, entry: Entry) -> Result<()> {
         self.trie
-            .add(path.as_bytes(), &entry.reference, entry.metadata, &mut self.ls)
+            .add(
+                path.as_bytes(),
+                &entry.reference,
+                entry.metadata,
+                &mut self.ls,
+            )
             .await
     }
 
@@ -110,7 +115,12 @@ impl Manifest {
 
     pub async fn set_root(&mut self, metadata: BTreeMap<String, String>) -> Result<()> {
         self.trie
-            .add("/".as_bytes(), &vec![0; 32].to_vec(), metadata, &mut self.ls)
+            .add(
+                "/".as_bytes(),
+                &vec![0; 32].to_vec(),
+                metadata,
+                &mut self.ls,
+            )
             .await?;
         let mut root_node = self.trie.lookup_node("/".as_bytes(), &mut self.ls).await?;
         let mut type_ = root_node.node_type;

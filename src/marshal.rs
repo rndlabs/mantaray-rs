@@ -356,8 +356,8 @@ impl Marshal for Fork {
                     NODE_OBFUSCATION_KEY_SIZE - metadata_bytes_size_with_size
                 }
                 x if x > NODE_OBFUSCATION_KEY_SIZE => {
-                    NODE_OBFUSCATION_KEY_SIZE - (metadata_bytes_size_with_size % NODE_OBFUSCATION_KEY_SIZE)
-                        
+                    NODE_OBFUSCATION_KEY_SIZE
+                        - (metadata_bytes_size_with_size % NODE_OBFUSCATION_KEY_SIZE)
                 }
                 _ => 0,
             };
