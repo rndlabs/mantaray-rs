@@ -9,6 +9,7 @@ pub mod marshal;
 pub mod node;
 pub mod persist;
 pub mod stringer;
+pub mod walker;
 
 const PATH_SEPARATOR: &str = "/";
 
