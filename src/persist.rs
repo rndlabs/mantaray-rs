@@ -2,7 +2,6 @@ use crate::Result;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use bee_api::BeeConfig;
-use lru::LruCache;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -135,7 +134,6 @@ pub struct BeeLoadSaver {
     pub uri: String,
     pub config: BeeConfig,
     pub client: reqwest::Client,
-    pub cache: Arc<Mutex<LruCache<Vec<u8>, Vec<u8>>>>,
 }
 
 impl BeeLoadSaver {
@@ -144,7 +142,6 @@ impl BeeLoadSaver {
             uri,
             config,
             client: reqwest::Client::new(),
-            cache: Arc::new(Mutex::new(LruCache::new(10000))),
         }
     }
 }
@@ -171,17 +168,11 @@ impl LoaderSaver for Arc<BeeLoadSaver> {
     }
 
     async fn load(&mut self, ref_: &[u8]) -> Result<Vec<u8>> {
-        let mut cache = self.cache.lock().await;
-        let cache = cache.get(ref_);
-        if let Some(data) = cache {
-            return Ok(data.clone());
-        } else {
-            Ok(
-                bee_api::bytes_get(&self.client, self.uri.clone(), hex::encode(ref_))
-                    .await?
-                    .0,
-            )
-        }
+        Ok(
+            bee_api::bytes_get(&self.client, self.uri.clone(), hex::encode(ref_))
+                .await?
+                .0,
+        )
     }
 
     async fn save(&self, data: &[u8]) -> Result<Vec<u8>> {
