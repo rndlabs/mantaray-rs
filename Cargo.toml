@@ -18,7 +18,8 @@ futures = "0.3.21"
 async-recursion = "1.0.0"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 async-trait = "0.1.57"
-bee_api = { path = "../bee_api" }
+# bee_api = { path = "../bee_api" }
+bee_api = { git = "https://github.com/rndlabs/bee-api-rs.git" }
 thiserror = "1.0.32"
 lru = "0.7.8"
 
