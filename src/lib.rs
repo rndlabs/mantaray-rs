@@ -1,3 +1,4 @@
+#![feature(let_chains)]
 use std::collections::BTreeMap;
 
 use node::Node;
